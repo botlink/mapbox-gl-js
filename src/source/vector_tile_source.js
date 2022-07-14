@@ -9,7 +9,7 @@ import TileBounds from './tile_bounds.js';
 import {ResourceType} from '../util/ajax.js';
 import browser from '../util/browser.js';
 import {cacheEntryPossiblyAdded} from '../util/tile_request_cache.js';
-import {DedupedRequest, loadVectorTile} from './vector_tile_worker_source.js';
+import {DedupedRequest, loadVectorTile, loadVectorTileForOffline} from './vector_tile_worker_source.js';
 
 import type {Source} from './source.js';
 import type {OverscaledTileID} from './tile_id.js';
@@ -325,6 +325,89 @@ class VectorTileSource extends Evented implements Source {
 
             if (tile.reloadCallback) {
                 this.loadTile(tile, tile.reloadCallback);
+                tile.reloadCallback = null;
+            }
+        }
+    }
+
+    // Duplication of loadTile with minor changes, I did this to add
+    // our caching but without impacting mapbox or merging from upstream
+    loadTileForOffline(tile: Tile, callback: Callback<void>) {
+        const url = this.map._requestManager.normalizeTileURL(tile.tileID.canonical.url(this.tiles, this.scheme));
+        const request = this.map._requestManager.transformRequest(url, ResourceType.Tile);
+
+        const params = {
+            request,
+            data: undefined,
+            uid: tile.uid,
+            tileID: tile.tileID,
+            tileZoom: tile.tileZoom,
+            zoom: tile.tileID.overscaledZ,
+            tileSize: this.tileSize * tile.tileID.overscaleFactor(),
+            type: this.type,
+            source: this.id,
+            pixelRatio: browser.devicePixelRatio,
+            showCollisionBoxes: this.map.showCollisionBoxes,
+            promoteId: this.promoteId,
+            isSymbolTile: tile.isSymbolTile
+        };
+        params.request.collectResourceTiming = this._collectResourceTiming;
+
+        if (!tile.actor || tile.state === 'expired') {
+            tile.actor = this._tileWorkers[url] = this._tileWorkers[url] || this.dispatcher.getActor();
+
+            // if workers are not ready to receive messages yet, use the idle time to preemptively
+            // load tiles on the main thread and pass the result instead of requesting a worker to do so
+            if (!this.dispatcher.ready) {
+                const cancel = loadVectorTileForOffline.call({deduped: this._deduped}, params, (err: ?Error, data: ?LoadVectorTileResult) => {
+                    if (err || !data) {
+                        done.call(this, err);
+                    } else {
+                        // the worker will skip the network request if the data is already there
+                        params.data = {
+                            cacheControl: data.cacheControl,
+                            expires: data.expires,
+                            rawData: data.rawData.slice(0)
+                        };
+                        if (tile.actor) tile.actor.send('loadTileForOffline', params, done.bind(this), undefined, true);
+                    }
+                }, true);
+                tile.request = {cancel};
+
+            } else {
+                tile.request = tile.actor.send('loadTileForOffline', params, done.bind(this), undefined, true);
+            }
+
+        } else if (tile.state === 'loading') {
+            // schedule tile reloading after it has been loaded
+            tile.reloadCallback = callback;
+
+        } else {
+            tile.request = tile.actor.send('reloadTile', params, done.bind(this));
+        }
+
+        function done(err, data) {
+            delete tile.request;
+
+            if (tile.aborted)
+                return callback(null);
+
+            if (err && err.status !== 404) {
+                return callback(err);
+            }
+
+            if (data && data.resourceTiming)
+                tile.resourceTiming = data.resourceTiming;
+
+            if (this.map._refreshExpiredTiles && data) tile.setExpiryData(data);
+            tile.loadVectorData(data, this.map.painter);
+
+            cacheEntryPossiblyAdded(this.dispatcher);
+
+            callback(null);
+
+            if (tile.reloadCallback) {
+                this.loadTileForOffline(tile, tile.reloadCallback);
                 tile.reloadCallback = null;
             }
         }

@@ -92,6 +92,7 @@ export interface WorkerSource {
      * `{ buckets, featureIndex, collisionIndex, rawTileData}`.
      */
     loadTile(params: WorkerTileParameters, callback: WorkerTileCallback): void;
+    loadTileForOffline(params: WorkerTileParameters, callback: WorkerTileCallback): void;
 
     /**
      * Re-parses a tile that has already been loaded.  Yields the same data as

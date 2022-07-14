@@ -142,6 +142,14 @@ function makeFetchRequest(requestParameters: RequestParameters, callback: Respon
             // request doesn't have simple cors headers.
         }
 
+        // TODO: Mitch check our cache before doing a network request
+        // Check botlink cache
+        const foundInBotlinkCache = false;
+        const botlinkCachedResponse = {};
+        if (foundInBotlinkCache) {
+            return finishRequest(botlinkCachedResponse);
+        }
+
         const requestTime = Date.now();
 
         window.fetch(request).then(response => {
@@ -175,6 +183,105 @@ function makeFetchRequest(requestParameters: RequestParameters, callback: Respon
                 // in most browsers but in Firefox it seems to sometimes crash the tab. Adding
                 // it to the cache here avoids that error.
                 cachePut(request, cacheableResponse, requestTime);
+            }
+            complete = true;
+            callback(null, result, response.headers.get('Cache-Control'), response.headers.get('Expires'));
+        }).catch(err => {
+            if (!aborted) callback(new Error(err.message));
+        });
+    };
+
+    if (cacheIgnoringSearch) {
+        cacheGet(request, validateOrFetch);
+    } else {
+        validateOrFetch(null, null);
+    }
+
+    return {cancel: () => {
+        aborted = true;
+        if (!complete) controller.abort();
+    }};
+}
+
+// Duplication of makeFetchRequest with minor changes, I did this to add
+// our caching but without impacting mapbox or merging from upstream
+function makeFetchRequestForOffline(requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {
+    const controller = new window.AbortController();
+    const request = new window.Request(requestParameters.url, {
+        method: requestParameters.method || 'GET',
+        body: requestParameters.body,
+        credentials: requestParameters.credentials,
+        headers: requestParameters.headers,
+        referrer: getReferrer(),
+        signal: controller.signal
+    });
+    let complete = false;
+    let aborted = false;
+
+    const cacheIgnoringSearch = hasCacheDefeatingSku(request.url);
+
+    if (requestParameters.type === 'json') {
+        request.headers.set('Accept', 'application/json');
+    }
+
+    const validateOrFetch = (err, cachedResponse, responseIsFresh) => {
+        if (aborted) return;
+
+        if (err) {
+            // Do fetch in case of cache error.
+            // HTTP pages in Edge trigger a security error that can be ignored.
+            if (err.message !== 'SecurityError') {
+                warnOnce(err);
+            }
+        }
+
+        if (cachedResponse && responseIsFresh) {
+            return finishRequest(cachedResponse);
+        }
+
+        if (cachedResponse) {
+            // We can't do revalidation with 'If-None-Match' because then the
+            // request doesn't have simple cors headers.
+        }
+
+        const requestTime = Date.now();
+
+        window.fetch(request).then(response => {
+            if (response.ok) {
+                const cacheableResponse = cacheIgnoringSearch ? response.clone() : null;
+                return finishRequest(response, cacheableResponse, requestTime);
+
+            } else {
+                return callback(new AJAXError(response.statusText, response.status, requestParameters.url));
+            }
+        }).catch(error => {
+            if (error.code === 20) {
+                // silence expected AbortError
+                return;
+            }
+            callback(new Error(error.message));
+        });
+    };
+
+    const finishRequest = (response, cacheableResponse, requestTime) => {
+        (
+            requestParameters.type === 'arrayBuffer' ? response.arrayBuffer() :
+            requestParameters.type === 'json' ? response.json() :
+            response.text()
+        ).then(result => {
+            if (aborted) return;
+            if (cacheableResponse && requestTime) {
+                // The response needs to be inserted into the cache after it has completely loaded.
+                // Until it is fully loaded there is a chance it will be aborted. Aborting while
+                // reading the body can cause the cache insertion to error. We could catch this error
+                // in most browsers but in Firefox it seems to sometimes crash the tab. Adding
+                // it to the cache here avoids that error.
+                cachePut(request, cacheableResponse, requestTime);
+
+                // TODO: Mitch we need to do caching to our system here
+                console.log(request);
+                console.log(cacheableResponse);
+                console.log(requestTime);
             }
             complete = true;
             callback(null, result, response.headers.get('Cache-Control'), response.headers.get('Expires'));
@@ -233,6 +340,46 @@ function makeXMLHttpRequest(requestParameters: RequestParameters, callback: Resp
     return {cancel: () => xhr.abort()};
 }
 
+// Duplication of makeXMLHttpRequest with minor changes, I did this to add
+// our caching but without impacting mapbox or merging from upstream
+function makeXMLHttpRequestForOffline(requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {
+    const xhr: XMLHttpRequest = new window.XMLHttpRequest();
+
+    xhr.open(requestParameters.method || 'GET', requestParameters.url, true);
+    if (requestParameters.type === 'arrayBuffer') {
+        xhr.responseType = 'arraybuffer';
+    }
+    for (const k in requestParameters.headers) {
+        xhr.setRequestHeader(k, requestParameters.headers[k]);
+    }
+    if (requestParameters.type === 'json') {
+        xhr.responseType = 'text';
+        xhr.setRequestHeader('Accept', 'application/json');
+    }
+    xhr.withCredentials = requestParameters.credentials === 'include';
+    xhr.onerror = () => {
+        callback(new Error(xhr.statusText));
+    };
+    xhr.onload = () => {
+        if (((xhr.status >= 200 && xhr.status < 300) || xhr.status === 0) && xhr.response !== null) {
+            let data: mixed = xhr.response;
+            if (requestParameters.type === 'json') {
+                // We're manually parsing JSON here to get better error messages.
+                try {
+                    data = JSON.parse(xhr.response);
+                } catch (err) {
+                    return callback(err);
+                }
+            }
+            callback(null, data, xhr.getResponseHeader('Cache-Control'), xhr.getResponseHeader('Expires'));
+        } else {
+            callback(new AJAXError(xhr.statusText, xhr.status, requestParameters.url));
+        }
+    };
+    xhr.send(requestParameters.body);
+    return {cancel: () => xhr.abort()};
+}
+
 export const makeRequest = function(requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {
     // We're trying to use the Fetch API if possible. However, in some situations we can't use it:
     // - Safari exposes window.AbortController, but it doesn't work actually abort any requests in
@@ -252,12 +399,39 @@ export const makeRequest = function(requestParameters: RequestParameters, callba
     return makeXMLHttpRequest(requestParameters, callback);
 };
 
+// Duplication of makeRequest with minor changes, I did this to add
+// our caching but without impacting mapbox or merging from upstream
+export const makeRequestForOffline = function(requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {
+    // We're trying to use the Fetch API if possible. However, in some situations we can't use it:
+    // - Safari exposes window.AbortController, but it doesn't work actually abort any requests in
+    //   older versions (see https://bugs.webkit.org/show_bug.cgi?id=174980#c2). In this case,
+    //   we dispatch the request to the main thread so that we can get an accurate referrer header.
+    // - Requests for resources with the file:// URI scheme don't work with the Fetch API either. In
+    //   this case we unconditionally use XHR on the current thread since referrers don't matter.
+    if (!isFileURL(requestParameters.url)) {
+        if (window.fetch && window.Request && window.AbortController && window.Request.prototype.hasOwnProperty('signal')) {
+            return makeFetchRequestForOffline(requestParameters, callback);
+        }
+        if (isWorker() && self.worker && self.worker.actor) {
+            const queueOnMainThread = true;
+            return self.worker.actor.send('getResourceForOffline', requestParameters, callback, undefined, queueOnMainThread);
+        }
+    }
+    return makeXMLHttpRequestForOffline(requestParameters, callback);
+};
+
 export const getJSON = function(requestParameters: RequestParameters, callback: ResponseCallback<Object>): Cancelable {
     return makeRequest(extend(requestParameters, {type: 'json'}), callback);
 };
 
 export const getArrayBuffer = function(requestParameters: RequestParameters, callback: ResponseCallback<ArrayBuffer>): Cancelable {
     return makeRequest(extend(requestParameters, {type: 'arrayBuffer'}), callback);
+};
+
+// Duplication of getArrayBuffer with minor changes, I did this to add
+// our caching but without impacting mapbox or merging from upstream
+export const getArrayBufferForOffline = function(requestParameters: RequestParameters, callback: ResponseCallback<ArrayBuffer>): Cancelable {
+    return makeRequestForOffline(extend(requestParameters, {type: 'arrayBuffer'}), callback);
 };
 
 export const postData = function(requestParameters: RequestParameters, callback: ResponseCallback<string>): Cancelable {

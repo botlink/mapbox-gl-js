@@ -151,6 +151,13 @@ class SourceCache extends Evented {
         return this._source.loadTile(tile, callback);
     }
 
+    // Duplication of _loadTile with minor changes, I did this to add
+    // our caching but without impacting mapbox or merging from upstream
+    _loadTileForOffline(tile: Tile, callback: Callback<void>): void {
+        tile.isSymbolTile = this._onlySymbols;
+        return this._source.loadTileForOffline(tile, callback);
+    }
+
     _unloadTile(tile: Tile): void {
         if (this._source.unloadTile)
             return this._source.unloadTile(tile, () => {});
@@ -1045,6 +1052,52 @@ class SourceCache extends Evented {
         asyncAll(tileIDs, (tileID, done) => {
             const tile = new Tile(tileID, this._source.tileSize * tileID.overscaleFactor(), this.transform.tileZoom, this.map.painter, this._isRaster);
             this._loadTile(tile, (err) => {
+                if (this._source.type === 'raster-dem' && tile.dem) this._backfillDEM(tile);
+                done(err, tile);
+            });
+        }, callback);
+    }
+
+    /**
+     * Preloads all tiles that will be requested for one or a series of transformations
+     * This data is stored in a botlink implemented cache in addition to the mapbox cache
+     *
+     * @private
+     * @returns {Object} Returns `this` | Promise.
+     */
+    // Duplication of _preloadTiles with minor changes, I did this to add
+    // our caching but without impacting mapbox or merging from upstream
+    preloadTilesForOffline(transform: Transform | Array<Transform>, callback: Callback<any>) {
+        const coveringTilesIDs: Map<number, OverscaledTileID> = new Map();
+        const transforms = Array.isArray(transform) ? transform : [transform];
+
+        const terrain = this.map.painter.terrain;
+        const tileSize = this.usedForTerrain && terrain ? terrain.getScaledDemTileSize() : this._source.tileSize;
+
+        for (const tr of transforms) {
+            const tileIDs = tr.coveringTiles({
+                tileSize,
+                minzoom: this._source.minzoom,
+                maxzoom: this._source.maxzoom,
+                roundZoom: this._source.roundZoom && !this.usedForTerrain,
+                reparseOverscaled: this._source.reparseOverscaled,
+                isTerrainDEM: this.usedForTerrain
+            });
+
+            for (const tileID of tileIDs) {
+                coveringTilesIDs.set(tileID.key, tileID);
+            }
+
+            if (this.usedForTerrain) {
+                tr.updateElevation(false);
+            }
+        }
+
+        const tileIDs = Array.from(coveringTilesIDs.values());
+
+        asyncAll(tileIDs, (tileID, done) => {
+            const tile = new Tile(tileID, this._source.tileSize * tileID.overscaleFactor(), this.transform.tileZoom, this.map.painter, this._isRaster);
+            this._loadTileForOffline(tile, (err) => {
                 if (this._source.type === 'raster-dem' && tile.dem) this._backfillDEM(tile);
                 done(err, tile);
             });

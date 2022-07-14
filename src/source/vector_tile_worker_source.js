@@ -1,6 +1,6 @@
 // @flow
 
-import {getArrayBuffer} from '../util/ajax.js';
+import {getArrayBuffer, getArrayBufferForOffline} from '../util/ajax.js';
 
 import vt from '@mapbox/vector-tile';
 import Protobuf from 'pbf';
@@ -129,6 +129,42 @@ export function loadVectorTile(params: RequestedTileParameters, callback: LoadVe
 }
 
 /**
+ * @private
+ */
+// Duplication of loadVectorTile with minor changes, I did this to add
+// our caching but without impacting mapbox or merging from upstream
+export function loadVectorTileForOffline(params: RequestedTileParameters, callback: LoadVectorDataCallback, skipParse?: boolean): (() => void) {
+    const key = JSON.stringify(params.request);
+
+    const makeRequest = (callback) => {
+        const request = getArrayBufferForOffline(params.request, (err: ?Error, data: ?ArrayBuffer, cacheControl: ?string, expires: ?string) => {
+            if (err) {
+                callback(err);
+            } else if (data) {
+                callback(null, {
+                    vectorTile: skipParse ? undefined : new vt.VectorTile(new Protobuf(data)),
+                    rawData: data,
+                    cacheControl,
+                    expires
+                });
+            }
+        });
+        return () => {
+            request.cancel();
+            callback();
+        };
+    };
+
+    if (params.data) {
+        // if we already got the result earlier (on the main thread), return it directly
+        (this.deduped: DedupedRequest).entries[key] = {result: [null, params.data]};
+    }
+
+    const callbackMetadata = {type: 'parseTile', isSymbolTile: params.isSymbolTile, zoom: params.tileZoom};
+    return (this.deduped: DedupedRequest).request(key, callbackMetadata, makeRequest, callback);
+}
+
+/**
  * The {@link WorkerSource} implementation that supports {@link VectorTileSource}.
  * This class is designed to be easily reused to support custom source types
  * for data formats that can be parsed/converted into an in-memory VectorTile
@@ -142,6 +178,7 @@ class VectorTileWorkerSource extends Evented implements WorkerSource {
     layerIndex: StyleLayerIndex;
     availableImages: Array<string>;
     loadVectorData: LoadVectorData;
+    loadVectorDataForOffline: LoadVectorData;
     loading: {[_: number]: WorkerTile };
     loaded: {[_: number]: WorkerTile };
     deduped: DedupedRequest;
@@ -161,6 +198,7 @@ class VectorTileWorkerSource extends Evented implements WorkerSource {
         this.layerIndex = layerIndex;
         this.availableImages = availableImages;
         this.loadVectorData = loadVectorData || loadVectorTile;
+        this.loadVectorDataForOffline = loadVectorData || loadVectorTileForOffline;
         this.loading = {};
         this.loaded = {};
         this.deduped = new DedupedRequest(actor.scheduler);
@@ -182,6 +220,77 @@ class VectorTileWorkerSource extends Evented implements WorkerSource {
 
         const workerTile = this.loading[uid] = new WorkerTile(params);
         workerTile.abort = this.loadVectorData(params, (err, response) => {
+
+            const aborted = !this.loading[uid];
+
+            delete this.loading[uid];
+
+            if (aborted || err || !response) {
+                workerTile.status = 'done';
+                if (!aborted) this.loaded[uid] = workerTile;
+                return callback(err);
+            }
+
+            const rawTileData = response.rawData;
+            const cacheControl = {};
+            if (response.expires) cacheControl.expires = response.expires;
+            if (response.cacheControl) cacheControl.cacheControl = response.cacheControl;
+
+            // response.vectorTile will be present in the GeoJSON worker case (which inherits from this class)
+            // because we stub the vector tile interface around JSON data instead of parsing it directly
+            workerTile.vectorTile = response.vectorTile || new vt.VectorTile(new Protobuf(rawTileData));
+            const parseTile = () => {
+                workerTile.parse(workerTile.vectorTile, this.layerIndex, this.availableImages, this.actor, (err, result) => {
+                    if (err || !result) return callback(err);
+
+                    const resourceTiming = {};
+                    if (perf) {
+                        // Transferring a copy of rawTileData because the worker needs to retain its copy.
+                        const resourceTimingData = getPerformanceMeasurement(requestParam);
+                        // it's necessary to eval the result of getEntriesByName() here via parse/stringify
+                        // late evaluation in the main thread causes TypeError: illegal invocation
+                        if (resourceTimingData.length > 0) {
+                            resourceTiming.resourceTiming = JSON.parse(JSON.stringify(resourceTimingData));
+                        }
+                    }
+                    callback(null, extend({rawTileData: rawTileData.slice(0)}, result, cacheControl, resourceTiming));
+                });
+            };
+
+            if (this.isSpriteLoaded) {
+                parseTile();
+            } else {
+                this.once('isSpriteLoaded', () => {
+                    if (this.scheduler) {
+                        const metadata = {type: 'parseTile', isSymbolTile: params.isSymbolTile, zoom: params.tileZoom};
+                        this.scheduler.add(parseTile, metadata);
+                    } else {
+                        parseTile();
+                    }
+                });
+            }
+
+            this.loaded = this.loaded || {};
+            this.loaded[uid] = workerTile;
+        });
+    }
+
+    /**
+     * Implements {@link WorkerSource#loadTile}. Delegates to
+     * {@link VectorTileWorkerSource#loadVectorData} (which by default expects
+     * a `params.url` property) for fetching and producing a VectorTile object.
+     * @private
+     */
+    // Duplication of loadTile with minor changes, I did this to add
+    // our caching but without impacting mapbox or merging from upstream
+    loadTileForOffline(params: WorkerTileParameters, callback: WorkerTileCallback) {
+        const uid = params.uid;
+
+        const requestParam = params && params.request;
+        const perf = requestParam && requestParam.collectResourceTiming;
+
+        const workerTile = this.loading[uid] = new WorkerTile(params);
+        workerTile.abort = this.loadVectorDataForOffline(params, (err, response) => {
 
             const aborted = !this.loading[uid];
 

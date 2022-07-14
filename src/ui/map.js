@@ -3507,6 +3507,33 @@ class Map extends Camera {
         return this;
     }
 
+    cacheAreaForOffline(lat: number, lng: number, zoom: number) {
+        try {
+            const sources: Array<SourceCache> = this.style ? (Object.values(this.style._sourceCaches): any) : [];
+
+            const transforms = [];
+
+            const newTransform = this.transform.clone();
+            newTransform.center = new LngLat(lng, lat);
+            newTransform.zoom = zoom;
+            transforms.push(newTransform);
+
+            asyncAll(sources, (source, done) => source.preloadTilesForOffline(newTransform, done), () => {
+                this.triggerRepaint();
+            });
+
+            // for (let i = 0; i < vectorTileSources.length; i++) {
+            //     const tileSource = vectorTileSources[i];
+
+            //     if (tileSource.cacheArea) {
+            //         tileSource.cacheArea(newTransform, bounds);
+            //     }
+            // }
+        } catch (e) {
+
+        }
+    }
+
     _onWindowOnline() {
         this._update();
     }

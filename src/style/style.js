@@ -13,7 +13,7 @@ import Terrain, {DrapeRenderMode} from './terrain.js';
 import Fog from './fog.js';
 import LineAtlas from '../render/line_atlas.js';
 import {pick, clone, extend, deepEqual, filterObject} from '../util/util.js';
-import {getJSON, getReferrer, makeRequest, ResourceType} from '../util/ajax.js';
+import {getJSON, getReferrer, makeRequest, makeRequestForOffline, ResourceType} from '../util/ajax.js';
 import {isMapboxURL} from '../util/mapbox.js';
 import browser from '../util/browser.js';
 import Dispatcher from '../util/dispatcher.js';
@@ -1802,6 +1802,10 @@ class Style extends Evented {
 
     getResource(mapId: string, params: RequestParameters, callback: ResponseCallback<any>): Cancelable {
         return makeRequest(params, callback);
+    }
+
+    getResourceForOffline(mapId: string, params: RequestParameters, callback: ResponseCallback<any>): Cancelable {
+        return makeRequestForOffline(params, callback);
     }
 
     _getSourceCache(source: string): SourceCache | void {

@@ -152,6 +152,15 @@ export default class Worker {
         this.getWorkerSource(mapId, params.type, params.source).loadTile(p, callback);
     }
 
+    // Duplication of loadTile with minor changes, I did this to add
+    // our caching but without impacting mapbox or merging from upstream
+    loadTileForOffline(mapId: string, params: WorkerTileParameters & {type: string}, callback: WorkerTileCallback) {
+        assert(params.type);
+        const p = this.enableTerrain ? extend({enableTerrain: this.terrain}, params) : params;
+        p.projection = this.projections[mapId] || this.defaultProjection;
+        this.getWorkerSource(mapId, params.type, params.source).loadTileForOffline(p, callback);
+    }
+
     loadDEMTile(mapId: string, params: WorkerDEMTileParameters, callback: WorkerDEMTileCallback) {
         const p = this.enableTerrain ? extend({buildQuadTree: this.terrain}, params) : params;
         this.getDEMWorkerSource(mapId, params.source).loadTile(p, callback);
