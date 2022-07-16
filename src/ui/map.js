@@ -3521,14 +3521,6 @@ class Map extends Camera {
             asyncAll(sources, (source, done) => source.preloadTilesForOffline(newTransform, done), () => {
                 this.triggerRepaint();
             });
-
-            // for (let i = 0; i < vectorTileSources.length; i++) {
-            //     const tileSource = vectorTileSources[i];
-
-            //     if (tileSource.cacheArea) {
-            //         tileSource.cacheArea(newTransform, bounds);
-            //     }
-            // }
         } catch (e) {
 
         }

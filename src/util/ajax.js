@@ -5,11 +5,14 @@ import {extend, warnOnce, isWorker} from './util.js';
 import {isMapboxHTTPURL, hasCacheDefeatingSku} from './mapbox.js';
 import config from './config.js';
 import assert from 'assert';
-import {cacheGet, cachePut} from './tile_request_cache.js';
+import {cacheGet, cachePut, stripQueryParameters} from './tile_request_cache.js';
 import webpSupported from './webp_supported.js';
 
 import type {Callback} from '../types/callback.js';
 import type {Cancelable} from '../types/cancelable.js';
+
+// import {Storage} from '@capacitor/storage/dist/plugin.cjs';
+import {db} from '../data/botlinkCache';
 
 /**
  * The type of a resource.
@@ -122,7 +125,7 @@ function makeFetchRequest(requestParameters: RequestParameters, callback: Respon
         request.headers.set('Accept', 'application/json');
     }
 
-    const validateOrFetch = (err, cachedResponse, responseIsFresh) => {
+    const validateOrFetch = async (err, cachedResponse, responseIsFresh) => {
         if (aborted) return;
 
         if (err) {
@@ -133,20 +136,36 @@ function makeFetchRequest(requestParameters: RequestParameters, callback: Respon
             }
         }
 
-        if (cachedResponse && responseIsFresh) {
-            return finishRequest(cachedResponse);
-        }
-
         if (cachedResponse) {
+            if (responseIsFresh) {
+                return finishRequest(cachedResponse);
+            }
+
             // We can't do revalidation with 'If-None-Match' because then the
             // request doesn't have simple cors headers.
         }
 
-        // TODO: Mitch check our cache before doing a network request
-        // Check botlink cache
-        const foundInBotlinkCache = false;
-        const botlinkCachedResponse = {};
+        // Check botlink cache, if found use that, otherwise make network request
+        const url = stripQueryParameters(request.url);
+        const cachedTile = await getCachedTile(url);
+
+        const foundInBotlinkCache = !!cachedTile;
         if (foundInBotlinkCache) {
+            const getData = async () => cachedTile.blob;
+            const botlinkCachedResponse = {
+                headers: {
+                    get: (key) => {
+                        if (key === 'Cache-Control') {
+                            return 'max-age=43200,s-maxage=300';
+                        } else if ('Expires') {
+                            return new Date(new Date().getTime() + 43200 * 1000).toUTCString();
+                        }
+                    }
+                },
+                arrayBuffer: getData,
+                json: getData,
+                text: getData
+            };
             return finishRequest(botlinkCachedResponse);
         }
 
@@ -268,7 +287,7 @@ function makeFetchRequestForOffline(requestParameters: RequestParameters, callba
             requestParameters.type === 'arrayBuffer' ? response.arrayBuffer() :
             requestParameters.type === 'json' ? response.json() :
             response.text()
-        ).then(result => {
+        ).then(async (result) => {
             if (aborted) return;
             if (cacheableResponse && requestTime) {
                 // The response needs to be inserted into the cache after it has completely loaded.
@@ -278,10 +297,21 @@ function makeFetchRequestForOffline(requestParameters: RequestParameters, callba
                 // it to the cache here avoids that error.
                 cachePut(request, cacheableResponse, requestTime);
 
-                // TODO: Mitch we need to do caching to our system here
-                console.log(request);
-                console.log(cacheableResponse);
-                console.log(requestTime);
+                const url = stripQueryParameters(request.url);
+                const cachedTile = await getCachedTile(url);
+                if (cachedTile) {
+                    await cachedTile.delete();
+                }
+
+                try {
+                    await db.tiles.add({
+                        url,
+                        blob: result,
+                    });
+                } catch (error) {
+                    console.log('botlink cache failed to cache tile');
+                    console.error(error.message);
+                }
             }
             complete = true;
             callback(null, result, response.headers.get('Cache-Control'), response.headers.get('Expires'));
@@ -301,6 +331,11 @@ function makeFetchRequestForOffline(requestParameters: RequestParameters, callba
         if (!complete) controller.abort();
     }};
 }
+
+const getCachedTile = async (url) => {
+    const cachedTile = await db.tiles.where('url').equalsIgnoreCase(url).first();
+    return cachedTile;
+};
 
 function makeXMLHttpRequest(requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {
     const xhr: XMLHttpRequest = new window.XMLHttpRequest();
@@ -340,6 +375,8 @@ function makeXMLHttpRequest(requestParameters: RequestParameters, callback: Resp
     return {cancel: () => xhr.abort()};
 }
 
+// TODO: BOTLINK Do we need to add caching layer to xml requests?
+// test on mobile devices to ensure everything is working
 // Duplication of makeXMLHttpRequest with minor changes, I did this to add
 // our caching but without impacting mapbox or merging from upstream
 function makeXMLHttpRequestForOffline(requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {

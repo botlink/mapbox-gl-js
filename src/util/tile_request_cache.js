@@ -116,7 +116,7 @@ function getQueryParameters(url: string) {
     return paramStart > 0 ? url.slice(paramStart + 1).split('&') : [];
 }
 
-function stripQueryParameters(url: string) {
+export function stripQueryParameters(url: string) {
     const start = url.indexOf('?');
 
     if (start < 0) return url;
