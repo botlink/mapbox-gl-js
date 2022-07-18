@@ -332,11 +332,12 @@ class VectorTileSource extends Evented implements Source {
 
     // Duplication of loadTile with minor changes, I did this to add
     // our caching but without impacting mapbox or merging from upstream
-    loadTileForOffline(tile: Tile, callback: Callback<void>) {
+    loadTileForOffline(flightPlanId: string, tile: Tile, callback: Callback<void>) {
         const url = this.map._requestManager.normalizeTileURL(tile.tileID.canonical.url(this.tiles, this.scheme));
         const request = this.map._requestManager.transformRequest(url, ResourceType.Tile);
 
         const params = {
+            flightPlanId,
             request,
             data: undefined,
             uid: tile.uid,
@@ -407,7 +408,7 @@ class VectorTileSource extends Evented implements Source {
             callback(null);
 
             if (tile.reloadCallback) {
-                this.loadTileForOffline(tile, tile.reloadCallback);
+                this.loadTileForOffline(flightPlanId, tile, tile.reloadCallback);
                 tile.reloadCallback = null;
             }
         }

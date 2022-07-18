@@ -1,10 +1,4 @@
 /* Mapbox GL JS is Copyright © 2020 Mapbox and subject to the Mapbox Terms of Service ((https://www.mapbox.com/legal/tos/). */
-(function (global, factory) {
-typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
-typeof define === 'function' && define.amd ? define(factory) :
-(global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.mapboxgl = factory());
-})(this, (function () { 'use strict';
-
 /* eslint-disable */
 
 var shared, worker, mapboxgl;
@@ -6420,7 +6414,15 @@ DexiePromise.rejectionMapper = mapError;
 setDebug(debug, dexieStackFrameFilter);
 
 const db = new Dexie$1('botlink-tile-cache');
-db.version(1).stores({ tiles: 'url, blob' });
+db.version(1).stores({ tiles: 'url, *flightPlanIds, blob' });
+const getCachedTile = async url => {
+    const cachedTile = await db.tiles.where('url').equalsIgnoreCase(url).first();
+    return cachedTile;
+};
+const getCachedTilesForFlightPlan = async flightPlanId => {
+    const cachedTiles = await db.tiles.where('flightPlanIds').equals(flightPlanId).toArray();
+    return cachedTiles;
+};
 
 const ResourceType = {
     Unknown: 'Unknown',
@@ -6542,7 +6544,7 @@ function makeFetchRequest(requestParameters, callback) {
         }
     };
 }
-function makeFetchRequestForOffline(requestParameters, callback) {
+function makeFetchRequestForOffline(flightPlanId, requestParameters, callback) {
     const controller = new window$1.AbortController();
     const request = new window$1.Request(requestParameters.url, {
         method: requestParameters.method || 'GET',
@@ -6588,22 +6590,26 @@ function makeFetchRequestForOffline(requestParameters, callback) {
         (requestParameters.type === 'arrayBuffer' ? response.arrayBuffer() : requestParameters.type === 'json' ? response.json() : response.text()).then(async result => {
             if (aborted)
                 return;
+            const url = stripQueryParameters(request.url);
+            const cachedTile = await getCachedTile(url);
+            let flightPlanIds = cachedTile ? cachedTile.flightPlanIds : [];
+            if (cachedTile) {
+                await db.tiles.where('url').equalsIgnoreCase(url).delete();
+            }
+            flightPlanIds.push(flightPlanId);
+            flightPlanIds = flightPlanIds.filter(onlyUnique);
+            try {
+                await db.tiles.add({
+                    url,
+                    flightPlanIds,
+                    blob: result
+                });
+            } catch (error) {
+                console.log('botlink cache failed to cache tile');
+                console.error(error.message);
+            }
             if (cacheableResponse && requestTime) {
                 cachePut(request, cacheableResponse, requestTime);
-                const url = stripQueryParameters(request.url);
-                const cachedTile = await getCachedTile(url);
-                if (cachedTile) {
-                    await cachedTile.delete();
-                }
-                try {
-                    await db.tiles.add({
-                        url,
-                        blob: result
-                    });
-                } catch (error) {
-                    console.log('botlink cache failed to cache tile');
-                    console.error(error.message);
-                }
             }
             complete = true;
             callback(null, result, response.headers.get('Cache-Control'), response.headers.get('Expires'));
@@ -6625,10 +6631,9 @@ function makeFetchRequestForOffline(requestParameters, callback) {
         }
     };
 }
-const getCachedTile = async url => {
-    const cachedTile = await db.tiles.where('url').equalsIgnoreCase(url).first();
-    return cachedTile;
-};
+function onlyUnique(value, index, self) {
+    return self.indexOf(value) === index;
+}
 function makeXMLHttpRequest(requestParameters, callback) {
     const xhr = new window$1.XMLHttpRequest();
     xhr.open(requestParameters.method || 'GET', requestParameters.url, true);
@@ -6664,7 +6669,7 @@ function makeXMLHttpRequest(requestParameters, callback) {
     xhr.send(requestParameters.body);
     return { cancel: () => xhr.abort() };
 }
-function makeXMLHttpRequestForOffline(requestParameters, callback) {
+function makeXMLHttpRequestForOffline(flightPlanId, requestParameters, callback) {
     const xhr = new window$1.XMLHttpRequest();
     xhr.open(requestParameters.method || 'GET', requestParameters.url, true);
     if (requestParameters.type === 'arrayBuffer') {
@@ -6711,17 +6716,17 @@ const makeRequest = function (requestParameters, callback) {
     }
     return makeXMLHttpRequest(requestParameters, callback);
 };
-const makeRequestForOffline = function (requestParameters, callback) {
+const makeRequestForOffline = function (flightPlanId, requestParameters, callback) {
     if (!isFileURL(requestParameters.url)) {
         if (window$1.fetch && window$1.Request && window$1.AbortController && window$1.Request.prototype.hasOwnProperty('signal')) {
-            return makeFetchRequestForOffline(requestParameters, callback);
+            return makeFetchRequestForOffline(flightPlanId, requestParameters, callback);
         }
         if (isWorker() && self.worker && self.worker.actor) {
             const queueOnMainThread = true;
             return self.worker.actor.send('getResourceForOffline', requestParameters, callback, undefined, queueOnMainThread);
         }
     }
-    return makeXMLHttpRequestForOffline(requestParameters, callback);
+    return makeXMLHttpRequestForOffline(flightPlanId, requestParameters, callback);
 };
 const getJSON = function (requestParameters, callback) {
     return makeRequest(extend$2(requestParameters, { type: 'json' }), callback);
@@ -6729,8 +6734,8 @@ const getJSON = function (requestParameters, callback) {
 const getArrayBuffer = function (requestParameters, callback) {
     return makeRequest(extend$2(requestParameters, { type: 'arrayBuffer' }), callback);
 };
-const getArrayBufferForOffline = function (requestParameters, callback) {
-    return makeRequestForOffline(extend$2(requestParameters, { type: 'arrayBuffer' }), callback);
+const getArrayBufferForOffline = function (flightPlanId, requestParameters, callback) {
+    return makeRequestForOffline(flightPlanId, extend$2(requestParameters, { type: 'arrayBuffer' }), callback);
 };
 const postData = function (requestParameters, callback) {
     return makeRequest(extend$2(requestParameters, { method: 'POST' }), callback);
@@ -29763,9 +29768,9 @@ class SourceCache extends Evented {
         tile.isSymbolTile = this._onlySymbols;
         return this._source.loadTile(tile, callback);
     }
-    _loadTileForOffline(tile, callback) {
+    _loadTileForOffline(flightPlanId, tile, callback) {
         tile.isSymbolTile = this._onlySymbols;
-        return this._source.loadTileForOffline(tile, callback);
+        return this._source.loadTileForOffline(flightPlanId, tile, callback);
     }
     _unloadTile(tile) {
         if (this._source.unloadTile)
@@ -30400,7 +30405,7 @@ class SourceCache extends Evented {
             });
         }, callback);
     }
-    preloadTilesForOffline(transform, callback) {
+    preloadTilesForOffline(flightPlanId, transform, callback) {
         const coveringTilesIDs = new Map();
         const transforms = Array.isArray(transform) ? transform : [transform];
         const terrain = this.map.painter.terrain;
@@ -30424,7 +30429,7 @@ class SourceCache extends Evented {
         const tileIDs = Array.from(coveringTilesIDs.values());
         asyncAll(tileIDs, (tileID, done) => {
             const tile = new Tile(tileID, this._source.tileSize * tileID.overscaleFactor(), this.transform.tileZoom, this.map.painter, this._isRaster);
-            this._loadTileForOffline(tile, err => {
+            this._loadTileForOffline(flightPlanId, tile, err => {
                 if (this._source.type === 'raster-dem' && tile.dem)
                     this._backfillDEM(tile);
                 done(err, tile);
@@ -31146,7 +31151,7 @@ function loadVectorTile(params, callback, skipParse) {
 function loadVectorTileForOffline(params, callback, skipParse) {
     const key = JSON.stringify(params.request);
     const makeRequest = callback => {
-        const request = getArrayBufferForOffline(params.request, (err, data, cacheControl, expires) => {
+        const request = getArrayBufferForOffline(params.flightPlanId, params.request, (err, data, cacheControl, expires) => {
             if (err) {
                 callback(err);
             } else if (data) {
@@ -31455,6 +31460,7 @@ exports.createExpression = createExpression;
 exports.createLayout = createLayout;
 exports.createStyleLayer = createStyleLayer;
 exports.cross = cross;
+exports.db = db;
 exports.degToRad = degToRad;
 exports.distance = distance;
 exports.div = div;
@@ -31485,6 +31491,7 @@ exports.getAABBPointSquareDist = getAABBPointSquareDist;
 exports.getAnchorAlignment = getAnchorAlignment;
 exports.getAnchorJustification = getAnchorJustification;
 exports.getBounds = getBounds;
+exports.getCachedTilesForFlightPlan = getCachedTilesForFlightPlan;
 exports.getColumn = getColumn;
 exports.getGridMatrix = getGridMatrix;
 exports.getImage = getImage;
@@ -35930,10 +35937,11 @@ class VectorTileSource extends ref_properties.Evented {
             }
         }
     }
-    loadTileForOffline(tile, callback) {
+    loadTileForOffline(flightPlanId, tile, callback) {
         const url = this.map._requestManager.normalizeTileURL(tile.tileID.canonical.url(this.tiles, this.scheme));
         const request = this.map._requestManager.transformRequest(url, ref_properties.ResourceType.Tile);
         const params = {
+            flightPlanId,
             request,
             data: undefined,
             uid: tile.uid,
@@ -35989,7 +35997,7 @@ class VectorTileSource extends ref_properties.Evented {
             ref_properties.cacheEntryPossiblyAdded(this.dispatcher);
             callback(null);
             if (tile.reloadCallback) {
-                this.loadTileForOffline(tile, tile.reloadCallback);
+                this.loadTileForOffline(flightPlanId, tile, tile.reloadCallback);
                 tile.reloadCallback = null;
             }
         }
@@ -53600,7 +53608,7 @@ class Map extends Camera {
         });
         return this;
     }
-    cacheAreaForOffline(lat, lng, zoom) {
+    cacheAreaForOffline(flightPlanId, lat, lng, zoom) {
         try {
             const sources = this.style ? Object.values(this.style._sourceCaches) : [];
             const transforms = [];
@@ -53608,11 +53616,25 @@ class Map extends Camera {
             newTransform.center = new ref_properties.LngLat(lng, lat);
             newTransform.zoom = zoom;
             transforms.push(newTransform);
-            ref_properties.asyncAll(sources, (source, done) => source.preloadTilesForOffline(newTransform, done), () => {
+            ref_properties.asyncAll(sources, (source, done) => source.preloadTilesForOffline(flightPlanId, newTransform, done), () => {
                 this.triggerRepaint();
             });
         } catch (e) {
         }
+    }
+    async deleteCachedArea(flightPlanId) {
+        const cachedTiles = await ref_properties.getCachedTilesForFlightPlan(flightPlanId);
+        for (let i = 0; i < cachedTiles.length; i++) {
+            const cachedTile = cachedTiles[i];
+            const flightPlanIds = cachedTile.flightPlanIds.filter(id => id !== flightPlanId);
+            const tileUsedByMoreThanOneFlightPlan = flightPlanIds > 0;
+            if (tileUsedByMoreThanOneFlightPlan) {
+                await ref_properties.db.tiles.where('url').equalsIgnoreCase(cachedTile.url).modify({ flightPlanIds });
+            } else {
+                await ref_properties.db.tiles.where('url').equalsIgnoreCase(cachedTile.url).delete();
+            }
+        }
+        return cachedTiles;
     }
     _onWindowOnline() {
         this._update();
@@ -54901,7 +54923,5 @@ return exported;
 
 var mapboxgl$1 = mapboxgl;
 
-return mapboxgl$1;
-
-}));
+export { mapboxgl$1 as default };
 //# sourceMappingURL=mapbox-gl-unminified.js.map

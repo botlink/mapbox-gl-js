@@ -12,7 +12,7 @@ import type {Callback} from '../types/callback.js';
 import type {Cancelable} from '../types/cancelable.js';
 
 // import {Storage} from '@capacitor/storage/dist/plugin.cjs';
-import {db} from '../data/botlinkCache';
+import {db, getCachedTile} from '../data/botlinkCache';
 
 /**
  * The type of a resource.
@@ -224,7 +224,7 @@ function makeFetchRequest(requestParameters: RequestParameters, callback: Respon
 
 // Duplication of makeFetchRequest with minor changes, I did this to add
 // our caching but without impacting mapbox or merging from upstream
-function makeFetchRequestForOffline(requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {
+function makeFetchRequestForOffline(flightPlanId: string, requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {
     const controller = new window.AbortController();
     const request = new window.Request(requestParameters.url, {
         method: requestParameters.method || 'GET',
@@ -289,6 +289,29 @@ function makeFetchRequestForOffline(requestParameters: RequestParameters, callba
             response.text()
         ).then(async (result) => {
             if (aborted) return;
+
+            const url = stripQueryParameters(request.url);
+            const cachedTile = await getCachedTile(url);
+
+            let flightPlanIds = cachedTile ? cachedTile.flightPlanIds : [];
+            if (cachedTile) {
+                await db.tiles.where('url').equalsIgnoreCase(url).delete();
+            }
+
+            flightPlanIds.push(flightPlanId);
+            flightPlanIds = flightPlanIds.filter(onlyUnique);
+
+            try {
+                await db.tiles.add({
+                    url,
+                    flightPlanIds,
+                    blob: result,
+                });
+            } catch (error) {
+                console.log('botlink cache failed to cache tile');
+                console.error(error.message);
+            }
+
             if (cacheableResponse && requestTime) {
                 // The response needs to be inserted into the cache after it has completely loaded.
                 // Until it is fully loaded there is a chance it will be aborted. Aborting while
@@ -296,22 +319,6 @@ function makeFetchRequestForOffline(requestParameters: RequestParameters, callba
                 // in most browsers but in Firefox it seems to sometimes crash the tab. Adding
                 // it to the cache here avoids that error.
                 cachePut(request, cacheableResponse, requestTime);
-
-                const url = stripQueryParameters(request.url);
-                const cachedTile = await getCachedTile(url);
-                if (cachedTile) {
-                    await cachedTile.delete();
-                }
-
-                try {
-                    await db.tiles.add({
-                        url,
-                        blob: result,
-                    });
-                } catch (error) {
-                    console.log('botlink cache failed to cache tile');
-                    console.error(error.message);
-                }
             }
             complete = true;
             callback(null, result, response.headers.get('Cache-Control'), response.headers.get('Expires'));
@@ -332,10 +339,9 @@ function makeFetchRequestForOffline(requestParameters: RequestParameters, callba
     }};
 }
 
-const getCachedTile = async (url) => {
-    const cachedTile = await db.tiles.where('url').equalsIgnoreCase(url).first();
-    return cachedTile;
-};
+function onlyUnique(value, index, self) {
+    return self.indexOf(value) === index;
+}
 
 function makeXMLHttpRequest(requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {
     const xhr: XMLHttpRequest = new window.XMLHttpRequest();
@@ -379,7 +385,7 @@ function makeXMLHttpRequest(requestParameters: RequestParameters, callback: Resp
 // test on mobile devices to ensure everything is working
 // Duplication of makeXMLHttpRequest with minor changes, I did this to add
 // our caching but without impacting mapbox or merging from upstream
-function makeXMLHttpRequestForOffline(requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {
+function makeXMLHttpRequestForOffline(flightPlanId: string, requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {
     const xhr: XMLHttpRequest = new window.XMLHttpRequest();
 
     xhr.open(requestParameters.method || 'GET', requestParameters.url, true);
@@ -438,7 +444,7 @@ export const makeRequest = function(requestParameters: RequestParameters, callba
 
 // Duplication of makeRequest with minor changes, I did this to add
 // our caching but without impacting mapbox or merging from upstream
-export const makeRequestForOffline = function(requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {
+export const makeRequestForOffline = function(flightPlanId: string, requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {
     // We're trying to use the Fetch API if possible. However, in some situations we can't use it:
     // - Safari exposes window.AbortController, but it doesn't work actually abort any requests in
     //   older versions (see https://bugs.webkit.org/show_bug.cgi?id=174980#c2). In this case,
@@ -447,14 +453,14 @@ export const makeRequestForOffline = function(requestParameters: RequestParamete
     //   this case we unconditionally use XHR on the current thread since referrers don't matter.
     if (!isFileURL(requestParameters.url)) {
         if (window.fetch && window.Request && window.AbortController && window.Request.prototype.hasOwnProperty('signal')) {
-            return makeFetchRequestForOffline(requestParameters, callback);
+            return makeFetchRequestForOffline(flightPlanId, requestParameters, callback);
         }
         if (isWorker() && self.worker && self.worker.actor) {
             const queueOnMainThread = true;
             return self.worker.actor.send('getResourceForOffline', requestParameters, callback, undefined, queueOnMainThread);
         }
     }
-    return makeXMLHttpRequestForOffline(requestParameters, callback);
+    return makeXMLHttpRequestForOffline(flightPlanId, requestParameters, callback);
 };
 
 export const getJSON = function(requestParameters: RequestParameters, callback: ResponseCallback<Object>): Cancelable {
@@ -467,8 +473,8 @@ export const getArrayBuffer = function(requestParameters: RequestParameters, cal
 
 // Duplication of getArrayBuffer with minor changes, I did this to add
 // our caching but without impacting mapbox or merging from upstream
-export const getArrayBufferForOffline = function(requestParameters: RequestParameters, callback: ResponseCallback<ArrayBuffer>): Cancelable {
-    return makeRequestForOffline(extend(requestParameters, {type: 'arrayBuffer'}), callback);
+export const getArrayBufferForOffline = function(flightPlanId: string, requestParameters: RequestParameters, callback: ResponseCallback<ArrayBuffer>): Cancelable {
+    return makeRequestForOffline(flightPlanId, extend(requestParameters, {type: 'arrayBuffer'}), callback);
 };
 
 export const postData = function(requestParameters: RequestParameters, callback: ResponseCallback<string>): Cancelable {

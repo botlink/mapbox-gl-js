@@ -72,6 +72,8 @@ import type {Source} from '../source/source.js';
 import type {QueryFeature} from '../util/vectortile_to_geojson.js';
 import type {QueryResult} from '../data/feature_index.js';
 
+import {db, getCachedTilesForFlightPlan} from '../data/botlinkCache';
+
 export type ControlPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 /* eslint-disable no-use-before-define */
 type IControl = {
@@ -3507,7 +3509,7 @@ class Map extends Camera {
         return this;
     }
 
-    cacheAreaForOffline(lat: number, lng: number, zoom: number) {
+    cacheAreaForOffline(flightPlanId: string, lat: number, lng: number, zoom: number) {
         try {
             const sources: Array<SourceCache> = this.style ? (Object.values(this.style._sourceCaches): any) : [];
 
@@ -3518,12 +3520,31 @@ class Map extends Camera {
             newTransform.zoom = zoom;
             transforms.push(newTransform);
 
-            asyncAll(sources, (source, done) => source.preloadTilesForOffline(newTransform, done), () => {
+            asyncAll(sources, (source, done) => source.preloadTilesForOffline(flightPlanId, newTransform, done), () => {
                 this.triggerRepaint();
             });
         } catch (e) {
 
         }
+    }
+
+    async deleteCachedArea (flightPlanId: string) {
+        const cachedTiles = await getCachedTilesForFlightPlan(flightPlanId);
+        for (let i = 0; i < cachedTiles.length; i++) {
+            const cachedTile = cachedTiles[i];
+            const flightPlanIds = cachedTile.flightPlanIds.filter(id => id !== flightPlanId);
+            const tileUsedByMoreThanOneFlightPlan = flightPlanIds > 0;
+
+            if (tileUsedByMoreThanOneFlightPlan) {
+                await db.tiles.where('url').equalsIgnoreCase(cachedTile.url).modify({
+                    flightPlanIds
+                });
+            } else {
+                await db.tiles.where('url').equalsIgnoreCase(cachedTile.url).delete();
+            }
+        }
+
+        return cachedTiles;
     }
 
     _onWindowOnline() {
