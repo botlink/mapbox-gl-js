@@ -1,4 +1,10 @@
 /* Mapbox GL JS is Copyright © 2020 Mapbox and subject to the Mapbox Terms of Service ((https://www.mapbox.com/legal/tos/). */
+(function (global, factory) {
+typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
+typeof define === 'function' && define.amd ? define(factory) :
+(global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.mapboxgl = factory());
+})(this, (function () { 'use strict';
+
 /* eslint-disable */
 
 var shared, worker, mapboxgl;
@@ -32,5 +38,7 @@ define(["./shared"],(function(e){"use strict";function t(e,i){if(Array.isArray(e
 
 var mapboxgl$1 = mapboxgl;
 
-export { mapboxgl$1 as default };
+return mapboxgl$1;
+
+}));
 //# sourceMappingURL=mapbox-gl.js.map
