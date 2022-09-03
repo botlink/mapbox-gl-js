@@ -32,8 +32,8 @@ define(['exports'], (function (exports) { 'use strict';
 
 var window$1 = typeof self !== 'undefined' ? self : {};
 
-var unitbezier$1 = UnitBezier$1;
-function UnitBezier$1(p1x, p1y, p2x, p2y) {
+var unitbezier = UnitBezier;
+function UnitBezier(p1x, p1y, p2x, p2y) {
     this.cx = 3 * p1x;
     this.bx = 3 * (p2x - p1x) - this.cx;
     this.ax = 1 - this.cx - this.bx;
@@ -45,16 +45,16 @@ function UnitBezier$1(p1x, p1y, p2x, p2y) {
     this.p2x = p2x;
     this.p2y = p2y;
 }
-UnitBezier$1.prototype.sampleCurveX = function (t) {
+UnitBezier.prototype.sampleCurveX = function (t) {
     return ((this.ax * t + this.bx) * t + this.cx) * t;
 };
-UnitBezier$1.prototype.sampleCurveY = function (t) {
+UnitBezier.prototype.sampleCurveY = function (t) {
     return ((this.ay * t + this.by) * t + this.cy) * t;
 };
-UnitBezier$1.prototype.sampleCurveDerivativeX = function (t) {
+UnitBezier.prototype.sampleCurveDerivativeX = function (t) {
     return (3 * this.ax * t + 2 * this.bx) * t + this.cx;
 };
-UnitBezier$1.prototype.solveCurveX = function (x, epsilon) {
+UnitBezier.prototype.solveCurveX = function (x, epsilon) {
     if (typeof epsilon === 'undefined')
         epsilon = 0.000001;
     var t0, t1, t2, x2, i;
@@ -87,7 +87,7 @@ UnitBezier$1.prototype.solveCurveX = function (x, epsilon) {
     }
     return t2;
 };
-UnitBezier$1.prototype.solve = function (x, epsilon) {
+UnitBezier.prototype.solve = function (x, epsilon) {
     return this.sampleCurveY(this.solveCurveX(x, epsilon));
 };
 
@@ -333,7 +333,7 @@ function bufferConvexPolygon(ring, buffer) {
     return output;
 }
 function bezier(p1x, p1y, p2x, p2y) {
-    const bezier = new unitbezier$1(p1x, p1y, p2x, p2y);
+    const bezier = new unitbezier(p1x, p1y, p2x, p2y);
     return function (t) {
         return bezier.solve(t);
     };
@@ -571,761 +571,6 @@ function getPerformanceMeasurement(request) {
 }
 
 var version = "2.9.1";
-
-let linkEl;
-let reducedMotionQuery;
-let stubTime;
-let canvas;
-const exported$1 = {
-    now() {
-        if (stubTime !== undefined) {
-            return stubTime;
-        }
-        return window$1.performance.now();
-    },
-    setNow(time) {
-        stubTime = time;
-    },
-    restoreNow() {
-        stubTime = undefined;
-    },
-    frame(fn) {
-        const frame = window$1.requestAnimationFrame(fn);
-        return { cancel: () => window$1.cancelAnimationFrame(frame) };
-    },
-    getImageData(img, padding = 0) {
-        const {width, height} = img;
-        if (!canvas) {
-            canvas = window$1.document.createElement('canvas');
-        }
-        const context = canvas.getContext('2d');
-        if (!context) {
-            throw new Error('failed to create canvas 2d context');
-        }
-        if (width > canvas.width || height > canvas.height) {
-            canvas.width = width;
-            canvas.height = height;
-        }
-        context.clearRect(-padding, -padding, width + 2 * padding, height + 2 * padding);
-        context.drawImage(img, 0, 0, width, height);
-        return context.getImageData(-padding, -padding, width + 2 * padding, height + 2 * padding);
-    },
-    resolveURL(path) {
-        if (!linkEl)
-            linkEl = window$1.document.createElement('a');
-        linkEl.href = path;
-        return linkEl.href;
-    },
-    get devicePixelRatio() {
-        return window$1.devicePixelRatio;
-    },
-    get prefersReducedMotion() {
-        if (!window$1.matchMedia)
-            return false;
-        if (reducedMotionQuery == null) {
-            reducedMotionQuery = window$1.matchMedia('(prefers-reduced-motion: reduce)');
-        }
-        return reducedMotionQuery.matches;
-    }
-};
-
-let mapboxHTTPURLRegex;
-const config = {
-    API_URL: 'https://api.mapbox.com',
-    get API_URL_REGEX() {
-        if (mapboxHTTPURLRegex == null) {
-            const prodMapboxHTTPURLRegex = /^((https?:)?\/\/)?([^\/]+\.)?mapbox\.c(n|om)(\/|\?|$)/i;
-            try {
-                mapboxHTTPURLRegex = process.env.API_URL_REGEX != null ? new RegExp(process.env.API_URL_REGEX) : prodMapboxHTTPURLRegex;
-            } catch (e) {
-                mapboxHTTPURLRegex = prodMapboxHTTPURLRegex;
-            }
-        }
-        return mapboxHTTPURLRegex;
-    },
-    get EVENTS_URL() {
-        if (!this.API_URL) {
-            return null;
-        }
-        if (this.API_URL.indexOf('https://api.mapbox.cn') === 0) {
-            return 'https://events.mapbox.cn/events/v2';
-        } else if (this.API_URL.indexOf('https://api.mapbox.com') === 0) {
-            return 'https://events.mapbox.com/events/v2';
-        } else {
-            return null;
-        }
-    },
-    SESSION_PATH: '/map-sessions/v1',
-    FEEDBACK_URL: 'https://apps.mapbox.com/feedback',
-    TILE_URL_VERSION: 'v4',
-    RASTER_URL_PREFIX: 'raster/v1',
-    REQUIRE_ACCESS_TOKEN: true,
-    ACCESS_TOKEN: null,
-    MAX_PARALLEL_IMAGE_REQUESTS: 16
-};
-
-const exported = {
-    supported: false,
-    testSupport
-};
-let glForTesting;
-let webpCheckComplete = false;
-let webpImgTest;
-let webpImgTestOnloadComplete = false;
-if (window$1.document) {
-    webpImgTest = window$1.document.createElement('img');
-    webpImgTest.onload = function () {
-        if (glForTesting)
-            testWebpTextureUpload(glForTesting);
-        glForTesting = null;
-        webpImgTestOnloadComplete = true;
-    };
-    webpImgTest.onerror = function () {
-        webpCheckComplete = true;
-        glForTesting = null;
-    };
-    webpImgTest.src = 'data:image/webp;base64,UklGRh4AAABXRUJQVlA4TBEAAAAvAQAAAAfQ//73v/+BiOh/AAA=';
-}
-function testSupport(gl) {
-    if (webpCheckComplete || !webpImgTest)
-        return;
-    if (webpImgTestOnloadComplete) {
-        testWebpTextureUpload(gl);
-    } else {
-        glForTesting = gl;
-    }
-}
-function testWebpTextureUpload(gl) {
-    const texture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    try {
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, webpImgTest);
-        if (gl.isContextLost())
-            return;
-        exported.supported = true;
-    } catch (e) {
-    }
-    gl.deleteTexture(texture);
-    webpCheckComplete = true;
-}
-
-const SKU_ID = '01';
-function createSkuToken() {
-    const TOKEN_VERSION = '1';
-    const base62chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    let sessionRandomizer = '';
-    for (let i = 0; i < 10; i++) {
-        sessionRandomizer += base62chars[Math.floor(Math.random() * 62)];
-    }
-    const expiration = 12 * 60 * 60 * 1000;
-    const token = [
-        TOKEN_VERSION,
-        SKU_ID,
-        sessionRandomizer
-    ].join('');
-    const tokenExpiresAt = Date.now() + expiration;
-    return {
-        token,
-        tokenExpiresAt
-    };
-}
-
-const AUTH_ERR_MSG = 'NO_ACCESS_TOKEN';
-class RequestManager {
-    constructor(transformRequestFn, customAccessToken, silenceAuthErrors) {
-        this._transformRequestFn = transformRequestFn;
-        this._customAccessToken = customAccessToken;
-        this._silenceAuthErrors = !!silenceAuthErrors;
-        this._createSkuToken();
-    }
-    _createSkuToken() {
-        const skuToken = createSkuToken();
-        this._skuToken = skuToken.token;
-        this._skuTokenExpiresAt = skuToken.tokenExpiresAt;
-    }
-    _isSkuTokenExpired() {
-        return Date.now() > this._skuTokenExpiresAt;
-    }
-    transformRequest(url, type) {
-        if (this._transformRequestFn) {
-            return this._transformRequestFn(url, type) || { url };
-        }
-        return { url };
-    }
-    normalizeStyleURL(url, accessToken) {
-        if (!isMapboxURL(url))
-            return url;
-        const urlObject = parseUrl(url);
-        urlObject.path = `/styles/v1${ urlObject.path }`;
-        return this._makeAPIURL(urlObject, this._customAccessToken || accessToken);
-    }
-    normalizeGlyphsURL(url, accessToken) {
-        if (!isMapboxURL(url))
-            return url;
-        const urlObject = parseUrl(url);
-        urlObject.path = `/fonts/v1${ urlObject.path }`;
-        return this._makeAPIURL(urlObject, this._customAccessToken || accessToken);
-    }
-    normalizeSourceURL(url, accessToken, language, worldview) {
-        if (!isMapboxURL(url))
-            return url;
-        const urlObject = parseUrl(url);
-        urlObject.path = `/v4/${ urlObject.authority }.json`;
-        urlObject.params.push('secure');
-        if (language) {
-            urlObject.params.push(`language=${ language }`);
-        }
-        if (worldview) {
-            urlObject.params.push(`worldview=${ worldview }`);
-        }
-        return this._makeAPIURL(urlObject, this._customAccessToken || accessToken);
-    }
-    normalizeSpriteURL(url, format, extension, accessToken) {
-        const urlObject = parseUrl(url);
-        if (!isMapboxURL(url)) {
-            urlObject.path += `${ format }${ extension }`;
-            return formatUrl(urlObject);
-        }
-        urlObject.path = `/styles/v1${ urlObject.path }/sprite${ format }${ extension }`;
-        return this._makeAPIURL(urlObject, this._customAccessToken || accessToken);
-    }
-    normalizeTileURL(tileURL, use2x, rasterTileSize) {
-        if (this._isSkuTokenExpired()) {
-            this._createSkuToken();
-        }
-        if (tileURL && !isMapboxURL(tileURL))
-            return tileURL;
-        const urlObject = parseUrl(tileURL);
-        const imageExtensionRe = /(\.(png|jpg)\d*)(?=$)/;
-        const extension = exported.supported ? '.webp' : '$1';
-        const use2xAs512 = rasterTileSize && urlObject.authority !== 'raster' && rasterTileSize === 512;
-        const suffix = use2x || use2xAs512 ? '@2x' : '';
-        urlObject.path = urlObject.path.replace(imageExtensionRe, `${ suffix }${ extension }`);
-        if (urlObject.authority === 'raster') {
-            urlObject.path = `/${ config.RASTER_URL_PREFIX }${ urlObject.path }`;
-        } else {
-            const tileURLAPIPrefixRe = /^.+\/v4\//;
-            urlObject.path = urlObject.path.replace(tileURLAPIPrefixRe, '/');
-            urlObject.path = `/${ config.TILE_URL_VERSION }${ urlObject.path }`;
-        }
-        const accessToken = this._customAccessToken || getAccessToken(urlObject.params) || config.ACCESS_TOKEN;
-        if (config.REQUIRE_ACCESS_TOKEN && accessToken && this._skuToken) {
-            urlObject.params.push(`sku=${ this._skuToken }`);
-        }
-        return this._makeAPIURL(urlObject, accessToken);
-    }
-    canonicalizeTileURL(url, removeAccessToken) {
-        const extensionRe = /\.[\w]+$/;
-        const urlObject = parseUrl(url);
-        if (!urlObject.path.match(/^(\/v4\/|\/raster\/v1\/)/) || !urlObject.path.match(extensionRe)) {
-            return url;
-        }
-        let result = 'mapbox://';
-        if (urlObject.path.match(/^\/raster\/v1\//)) {
-            const rasterPrefix = `/${ config.RASTER_URL_PREFIX }/`;
-            result += `raster/${ urlObject.path.replace(rasterPrefix, '') }`;
-        } else {
-            const tilesPrefix = `/${ config.TILE_URL_VERSION }/`;
-            result += `tiles/${ urlObject.path.replace(tilesPrefix, '') }`;
-        }
-        let params = urlObject.params;
-        if (removeAccessToken) {
-            params = params.filter(p => !p.match(/^access_token=/));
-        }
-        if (params.length)
-            result += `?${ params.join('&') }`;
-        return result;
-    }
-    canonicalizeTileset(tileJSON, sourceURL) {
-        const removeAccessToken = sourceURL ? isMapboxURL(sourceURL) : false;
-        const canonical = [];
-        for (const url of tileJSON.tiles || []) {
-            if (isMapboxHTTPURL(url)) {
-                canonical.push(this.canonicalizeTileURL(url, removeAccessToken));
-            } else {
-                canonical.push(url);
-            }
-        }
-        return canonical;
-    }
-    _makeAPIURL(urlObject, accessToken) {
-        const help = 'See https://www.mapbox.com/api-documentation/#access-tokens-and-token-scopes';
-        const apiUrlObject = parseUrl(config.API_URL);
-        urlObject.protocol = apiUrlObject.protocol;
-        urlObject.authority = apiUrlObject.authority;
-        if (urlObject.protocol === 'http') {
-            const i = urlObject.params.indexOf('secure');
-            if (i >= 0)
-                urlObject.params.splice(i, 1);
-        }
-        if (apiUrlObject.path !== '/') {
-            urlObject.path = `${ apiUrlObject.path }${ urlObject.path }`;
-        }
-        if (!config.REQUIRE_ACCESS_TOKEN)
-            return formatUrl(urlObject);
-        accessToken = accessToken || config.ACCESS_TOKEN;
-        if (!this._silenceAuthErrors) {
-            if (!accessToken)
-                throw new Error(`An API access token is required to use Mapbox GL. ${ help }`);
-            if (accessToken[0] === 's')
-                throw new Error(`Use a public access token (pk.*) with Mapbox GL, not a secret access token (sk.*). ${ help }`);
-        }
-        urlObject.params = urlObject.params.filter(d => d.indexOf('access_token') === -1);
-        urlObject.params.push(`access_token=${ accessToken || '' }`);
-        return formatUrl(urlObject);
-    }
-}
-function isMapboxURL(url) {
-    return url.indexOf('mapbox:') === 0;
-}
-function isMapboxHTTPURL(url) {
-    return config.API_URL_REGEX.test(url);
-}
-function hasCacheDefeatingSku(url) {
-    return url.indexOf('sku=') > 0 && isMapboxHTTPURL(url);
-}
-function getAccessToken(params) {
-    for (const param of params) {
-        const match = param.match(/^access_token=(.*)$/);
-        if (match) {
-            return match[1];
-        }
-    }
-    return null;
-}
-const urlRe = /^(\w+):\/\/([^/?]*)(\/[^?]+)?\??(.+)?/;
-function parseUrl(url) {
-    const parts = url.match(urlRe);
-    if (!parts) {
-        throw new Error('Unable to parse URL object');
-    }
-    return {
-        protocol: parts[1],
-        authority: parts[2],
-        path: parts[3] || '/',
-        params: parts[4] ? parts[4].split('&') : []
-    };
-}
-function formatUrl(obj) {
-    const params = obj.params.length ? `?${ obj.params.join('&') }` : '';
-    return `${ obj.protocol }://${ obj.authority }${ obj.path }${ params }`;
-}
-const telemEventKey = 'mapbox.eventData';
-function parseAccessToken(accessToken) {
-    if (!accessToken) {
-        return null;
-    }
-    const parts = accessToken.split('.');
-    if (!parts || parts.length !== 3) {
-        return null;
-    }
-    try {
-        const jsonData = JSON.parse(b64DecodeUnicode(parts[1]));
-        return jsonData;
-    } catch (e) {
-        return null;
-    }
-}
-class TelemetryEvent {
-    constructor(type) {
-        this.type = type;
-        this.anonId = null;
-        this.eventData = {};
-        this.queue = [];
-        this.pendingRequest = null;
-    }
-    getStorageKey(domain) {
-        const tokenData = parseAccessToken(config.ACCESS_TOKEN);
-        let u = '';
-        if (tokenData && tokenData['u']) {
-            u = b64EncodeUnicode(tokenData['u']);
-        } else {
-            u = config.ACCESS_TOKEN || '';
-        }
-        return domain ? `${ telemEventKey }.${ domain }:${ u }` : `${ telemEventKey }:${ u }`;
-    }
-    fetchEventData() {
-        const isLocalStorageAvailable = storageAvailable('localStorage');
-        const storageKey = this.getStorageKey();
-        const uuidKey = this.getStorageKey('uuid');
-        if (isLocalStorageAvailable) {
-            try {
-                const data = window$1.localStorage.getItem(storageKey);
-                if (data) {
-                    this.eventData = JSON.parse(data);
-                }
-                const uuid = window$1.localStorage.getItem(uuidKey);
-                if (uuid)
-                    this.anonId = uuid;
-            } catch (e) {
-                warnOnce('Unable to read from LocalStorage');
-            }
-        }
-    }
-    saveEventData() {
-        const isLocalStorageAvailable = storageAvailable('localStorage');
-        const storageKey = this.getStorageKey();
-        const uuidKey = this.getStorageKey('uuid');
-        if (isLocalStorageAvailable) {
-            try {
-                window$1.localStorage.setItem(uuidKey, this.anonId);
-                if (Object.keys(this.eventData).length >= 1) {
-                    window$1.localStorage.setItem(storageKey, JSON.stringify(this.eventData));
-                }
-            } catch (e) {
-                warnOnce('Unable to write to LocalStorage');
-            }
-        }
-    }
-    processRequests(_) {
-    }
-    postEvent(timestamp, additionalPayload, callback, customAccessToken) {
-        if (!config.EVENTS_URL)
-            return;
-        const eventsUrlObject = parseUrl(config.EVENTS_URL);
-        eventsUrlObject.params.push(`access_token=${ customAccessToken || config.ACCESS_TOKEN || '' }`);
-        const payload = {
-            event: this.type,
-            created: new Date(timestamp).toISOString(),
-            sdkIdentifier: 'mapbox-gl-js',
-            sdkVersion: version,
-            skuId: SKU_ID,
-            userId: this.anonId
-        };
-        const finalPayload = additionalPayload ? extend$2(payload, additionalPayload) : payload;
-        const request = {
-            url: formatUrl(eventsUrlObject),
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify([finalPayload])
-        };
-        this.pendingRequest = postData(request, error => {
-            this.pendingRequest = null;
-            callback(error);
-            this.saveEventData();
-            this.processRequests(customAccessToken);
-        });
-    }
-    queueRequest(event, customAccessToken) {
-        this.queue.push(event);
-        this.processRequests(customAccessToken);
-    }
-}
-class MapLoadEvent extends TelemetryEvent {
-    constructor() {
-        super('map.load');
-        this.success = {};
-        this.skuToken = '';
-    }
-    postMapLoadEvent(mapId, skuToken, customAccessToken, callback) {
-        this.skuToken = skuToken;
-        this.errorCb = callback;
-        if (config.EVENTS_URL) {
-            if (customAccessToken || config.ACCESS_TOKEN) {
-                this.queueRequest({
-                    id: mapId,
-                    timestamp: Date.now()
-                }, customAccessToken);
-            } else {
-                this.errorCb(new Error(AUTH_ERR_MSG));
-            }
-        }
-    }
-    processRequests(customAccessToken) {
-        if (this.pendingRequest || this.queue.length === 0)
-            return;
-        const {id, timestamp} = this.queue.shift();
-        if (id && this.success[id])
-            return;
-        if (!this.anonId) {
-            this.fetchEventData();
-        }
-        if (!validateUuid(this.anonId)) {
-            this.anonId = uuid();
-        }
-        this.postEvent(timestamp, { skuToken: this.skuToken }, err => {
-            if (err) {
-                this.errorCb(err);
-            } else {
-                if (id)
-                    this.success[id] = true;
-            }
-        }, customAccessToken);
-    }
-}
-class MapSessionAPI extends TelemetryEvent {
-    constructor() {
-        super('map.auth');
-        this.success = {};
-        this.skuToken = '';
-    }
-    getSession(timestamp, token, callback, customAccessToken) {
-        if (!config.API_URL || !config.SESSION_PATH)
-            return;
-        const authUrlObject = parseUrl(config.API_URL + config.SESSION_PATH);
-        authUrlObject.params.push(`sku=${ token || '' }`);
-        authUrlObject.params.push(`access_token=${ customAccessToken || config.ACCESS_TOKEN || '' }`);
-        const request = {
-            url: formatUrl(authUrlObject),
-            headers: { 'Content-Type': 'text/plain' }
-        };
-        this.pendingRequest = getData(request, error => {
-            this.pendingRequest = null;
-            callback(error);
-            this.saveEventData();
-            this.processRequests(customAccessToken);
-        });
-    }
-    getSessionAPI(mapId, skuToken, customAccessToken, callback) {
-        this.skuToken = skuToken;
-        this.errorCb = callback;
-        if (config.SESSION_PATH && config.API_URL) {
-            if (customAccessToken || config.ACCESS_TOKEN) {
-                this.queueRequest({
-                    id: mapId,
-                    timestamp: Date.now()
-                }, customAccessToken);
-            } else {
-                this.errorCb(new Error(AUTH_ERR_MSG));
-            }
-        }
-    }
-    processRequests(customAccessToken) {
-        if (this.pendingRequest || this.queue.length === 0)
-            return;
-        const {id, timestamp} = this.queue.shift();
-        if (id && this.success[id])
-            return;
-        this.getSession(timestamp, this.skuToken, err => {
-            if (err) {
-                this.errorCb(err);
-            } else {
-                if (id)
-                    this.success[id] = true;
-            }
-        }, customAccessToken);
-    }
-}
-class TurnstileEvent extends TelemetryEvent {
-    constructor(customAccessToken) {
-        super('appUserTurnstile');
-        this._customAccessToken = customAccessToken;
-    }
-    postTurnstileEvent(tileUrls, customAccessToken) {
-        if (config.EVENTS_URL && config.ACCESS_TOKEN && Array.isArray(tileUrls) && tileUrls.some(url => isMapboxURL(url) || isMapboxHTTPURL(url))) {
-            this.queueRequest(Date.now(), customAccessToken);
-        }
-    }
-    processRequests(customAccessToken) {
-        if (this.pendingRequest || this.queue.length === 0) {
-            return;
-        }
-        if (!this.anonId || !this.eventData.lastSuccess || !this.eventData.tokenU) {
-            this.fetchEventData();
-        }
-        const tokenData = parseAccessToken(config.ACCESS_TOKEN);
-        const tokenU = tokenData ? tokenData['u'] : config.ACCESS_TOKEN;
-        let dueForEvent = tokenU !== this.eventData.tokenU;
-        if (!validateUuid(this.anonId)) {
-            this.anonId = uuid();
-            dueForEvent = true;
-        }
-        const nextUpdate = this.queue.shift();
-        if (this.eventData.lastSuccess) {
-            const lastUpdate = new Date(this.eventData.lastSuccess);
-            const nextDate = new Date(nextUpdate);
-            const daysElapsed = (nextUpdate - this.eventData.lastSuccess) / (24 * 60 * 60 * 1000);
-            dueForEvent = dueForEvent || daysElapsed >= 1 || daysElapsed < -1 || lastUpdate.getDate() !== nextDate.getDate();
-        } else {
-            dueForEvent = true;
-        }
-        if (!dueForEvent) {
-            this.processRequests();
-            return;
-        }
-        this.postEvent(nextUpdate, { 'enabled.telemetry': false }, err => {
-            if (!err) {
-                this.eventData.lastSuccess = nextUpdate;
-                this.eventData.tokenU = tokenU;
-            }
-        }, customAccessToken);
-    }
-}
-const turnstileEvent_ = new TurnstileEvent();
-const postTurnstileEvent = turnstileEvent_.postTurnstileEvent.bind(turnstileEvent_);
-const mapLoadEvent_ = new MapLoadEvent();
-const postMapLoadEvent = mapLoadEvent_.postMapLoadEvent.bind(mapLoadEvent_);
-const mapSessionAPI_ = new MapSessionAPI();
-const getMapSessionAPI = mapSessionAPI_.getSessionAPI.bind(mapSessionAPI_);
-const authenticatedMaps = new Set();
-function storeAuthState(gl, state) {
-    if (state) {
-        authenticatedMaps.add(gl);
-    } else {
-        authenticatedMaps.delete(gl);
-    }
-}
-function isMapAuthenticated(gl) {
-    return authenticatedMaps.has(gl);
-}
-function removeAuthState(gl) {
-    authenticatedMaps.delete(gl);
-}
-
-const CACHE_NAME = 'mapbox-tiles';
-let cacheLimit = 500;
-let cacheCheckThreshold = 50;
-const MIN_TIME_UNTIL_EXPIRY = 1000 * 60 * 7;
-let sharedCaches = {};
-function getCacheName(url) {
-    const queryParams = getQueryParameters(url);
-    let language;
-    let worldview;
-    if (queryParams) {
-        queryParams.forEach(param => {
-            const entry = param.split('=');
-            if (entry[0] === 'language') {
-                language = entry[1];
-            } else if (entry[0] === 'worldview') {
-                worldview = entry[1];
-            }
-        });
-    }
-    let cacheName = CACHE_NAME;
-    if (language)
-        cacheName += `-${ language }`;
-    if (worldview)
-        cacheName += `-${ worldview }`;
-    return cacheName;
-}
-function cacheOpen(cacheName) {
-    if (window$1.caches && !sharedCaches[cacheName]) {
-        sharedCaches[cacheName] = window$1.caches.open(cacheName);
-    }
-}
-let responseConstructorSupportsReadableStream;
-function prepareBody(response, callback) {
-    if (responseConstructorSupportsReadableStream === undefined) {
-        try {
-            new Response(new ReadableStream());
-            responseConstructorSupportsReadableStream = true;
-        } catch (e) {
-            responseConstructorSupportsReadableStream = false;
-        }
-    }
-    if (responseConstructorSupportsReadableStream) {
-        callback(response.body);
-    } else {
-        response.blob().then(callback);
-    }
-}
-function cachePut(request, response, requestTime) {
-    const cacheName = getCacheName(request.url);
-    cacheOpen(cacheName);
-    if (!sharedCaches[cacheName])
-        return;
-    const options = {
-        status: response.status,
-        statusText: response.statusText,
-        headers: new window$1.Headers()
-    };
-    response.headers.forEach((v, k) => options.headers.set(k, v));
-    const cacheControl = parseCacheControl(response.headers.get('Cache-Control') || '');
-    if (cacheControl['no-store']) {
-        return;
-    }
-    if (cacheControl['max-age']) {
-        options.headers.set('Expires', new Date(requestTime + cacheControl['max-age'] * 1000).toUTCString());
-    }
-    const expires = options.headers.get('Expires');
-    if (!expires)
-        return;
-    const timeUntilExpiry = new Date(expires).getTime() - requestTime;
-    if (timeUntilExpiry < MIN_TIME_UNTIL_EXPIRY)
-        return;
-    prepareBody(response, body => {
-        const clonedResponse = new window$1.Response(body, options);
-        cacheOpen(cacheName);
-        if (!sharedCaches[cacheName])
-            return;
-        sharedCaches[cacheName].then(cache => cache.put(stripQueryParameters(request.url), clonedResponse)).catch(e => warnOnce(e.message));
-    });
-}
-function getQueryParameters(url) {
-    const paramStart = url.indexOf('?');
-    return paramStart > 0 ? url.slice(paramStart + 1).split('&') : [];
-}
-function stripQueryParameters(url) {
-    const start = url.indexOf('?');
-    if (start < 0)
-        return url;
-    const params = getQueryParameters(url);
-    const filteredParams = params.filter(param => {
-        const entry = param.split('=');
-        return entry[0] === 'language' || entry[0] === 'worldview';
-    });
-    if (filteredParams.length) {
-        return `${ url.slice(0, start) }?${ filteredParams.join('&') }`;
-    }
-    return url.slice(0, start);
-}
-function cacheGet(request, callback) {
-    const cacheName = getCacheName(request.url);
-    cacheOpen(cacheName);
-    if (!sharedCaches[cacheName])
-        return callback(null);
-    const strippedURL = stripQueryParameters(request.url);
-    sharedCaches[cacheName].then(cache => {
-        cache.match(strippedURL).then(response => {
-            const fresh = isFresh(response);
-            cache.delete(strippedURL);
-            if (fresh) {
-                cache.put(strippedURL, response.clone());
-            }
-            callback(null, response, fresh);
-        }).catch(callback);
-    }).catch(callback);
-}
-function isFresh(response) {
-    if (!response)
-        return false;
-    const expires = new Date(response.headers.get('Expires') || 0);
-    const cacheControl = parseCacheControl(response.headers.get('Cache-Control') || '');
-    return expires > Date.now() && !cacheControl['no-cache'];
-}
-let globalEntryCounter = Infinity;
-function cacheEntryPossiblyAdded(dispatcher) {
-    globalEntryCounter++;
-    if (globalEntryCounter > cacheCheckThreshold) {
-        dispatcher.getActor().send('enforceCacheSizeLimit', cacheLimit);
-        globalEntryCounter = 0;
-    }
-}
-function enforceCacheSizeLimit(limit) {
-    for (const sharedCache in sharedCaches) {
-        cacheOpen(sharedCache);
-        sharedCaches[sharedCache].then(cache => {
-            cache.keys().then(keys => {
-                for (let i = 0; i < keys.length - limit; i++) {
-                    cache.delete(keys[i]);
-                }
-            });
-        });
-    }
-}
-function clearTileCache(callback) {
-    const promises = [];
-    for (const cache in sharedCaches) {
-        promises.push(window$1.caches.delete(cache));
-        delete sharedCaches[cache];
-    }
-    if (callback) {
-        Promise.all(promises).catch(callback).then(() => callback());
-    }
-}
-function setCacheLimits(limit, checkThreshold) {
-    cacheLimit = limit;
-    cacheCheckThreshold = checkThreshold;
-}
 
 /*
  * Dexie.js - a minimalistic wrapper for IndexedDB
@@ -6420,15 +5665,770 @@ DexiePromise.rejectionMapper = mapError;
 setDebug(debug, dexieStackFrameFilter);
 
 const db = new Dexie$1('botlink-tile-cache');
-db.version(1).stores({ tiles: 'url, *flightPlanIds, blob' });
+db.version(1).stores({ tiles: 'url, *keys, blob' });
 const getCachedTile = async url => {
     const cachedTile = await db.tiles.where('url').equalsIgnoreCase(url).first();
     return cachedTile;
 };
-const getCachedTilesForFlightPlan = async flightPlanId => {
-    const cachedTiles = await db.tiles.where('flightPlanIds').equals(flightPlanId).toArray();
+const getCachedTilesForKey = async key => {
+    const cachedTiles = await db.tiles.where('keys').equals(key).toArray();
     return cachedTiles;
 };
+
+let linkEl;
+let reducedMotionQuery;
+let stubTime;
+let canvas;
+const exported$1 = {
+    now() {
+        if (stubTime !== undefined) {
+            return stubTime;
+        }
+        return window$1.performance.now();
+    },
+    setNow(time) {
+        stubTime = time;
+    },
+    restoreNow() {
+        stubTime = undefined;
+    },
+    frame(fn) {
+        const frame = window$1.requestAnimationFrame(fn);
+        return { cancel: () => window$1.cancelAnimationFrame(frame) };
+    },
+    getImageData(img, padding = 0) {
+        const {width, height} = img;
+        if (!canvas) {
+            canvas = window$1.document.createElement('canvas');
+        }
+        const context = canvas.getContext('2d');
+        if (!context) {
+            throw new Error('failed to create canvas 2d context');
+        }
+        if (width > canvas.width || height > canvas.height) {
+            canvas.width = width;
+            canvas.height = height;
+        }
+        context.clearRect(-padding, -padding, width + 2 * padding, height + 2 * padding);
+        context.drawImage(img, 0, 0, width, height);
+        return context.getImageData(-padding, -padding, width + 2 * padding, height + 2 * padding);
+    },
+    resolveURL(path) {
+        if (!linkEl)
+            linkEl = window$1.document.createElement('a');
+        linkEl.href = path;
+        return linkEl.href;
+    },
+    get devicePixelRatio() {
+        return window$1.devicePixelRatio;
+    },
+    get prefersReducedMotion() {
+        if (!window$1.matchMedia)
+            return false;
+        if (reducedMotionQuery == null) {
+            reducedMotionQuery = window$1.matchMedia('(prefers-reduced-motion: reduce)');
+        }
+        return reducedMotionQuery.matches;
+    }
+};
+
+let mapboxHTTPURLRegex;
+const config = {
+    API_URL: 'https://api.mapbox.com',
+    get API_URL_REGEX() {
+        if (mapboxHTTPURLRegex == null) {
+            const prodMapboxHTTPURLRegex = /^((https?:)?\/\/)?([^\/]+\.)?mapbox\.c(n|om)(\/|\?|$)/i;
+            try {
+                mapboxHTTPURLRegex = process.env.API_URL_REGEX != null ? new RegExp(process.env.API_URL_REGEX) : prodMapboxHTTPURLRegex;
+            } catch (e) {
+                mapboxHTTPURLRegex = prodMapboxHTTPURLRegex;
+            }
+        }
+        return mapboxHTTPURLRegex;
+    },
+    get EVENTS_URL() {
+        if (!this.API_URL) {
+            return null;
+        }
+        if (this.API_URL.indexOf('https://api.mapbox.cn') === 0) {
+            return 'https://events.mapbox.cn/events/v2';
+        } else if (this.API_URL.indexOf('https://api.mapbox.com') === 0) {
+            return 'https://events.mapbox.com/events/v2';
+        } else {
+            return null;
+        }
+    },
+    SESSION_PATH: '/map-sessions/v1',
+    FEEDBACK_URL: 'https://apps.mapbox.com/feedback',
+    TILE_URL_VERSION: 'v4',
+    RASTER_URL_PREFIX: 'raster/v1',
+    REQUIRE_ACCESS_TOKEN: true,
+    ACCESS_TOKEN: null,
+    MAX_PARALLEL_IMAGE_REQUESTS: 16
+};
+
+const exported = {
+    supported: false,
+    testSupport
+};
+let glForTesting;
+let webpCheckComplete = false;
+let webpImgTest;
+let webpImgTestOnloadComplete = false;
+if (window$1.document) {
+    webpImgTest = window$1.document.createElement('img');
+    webpImgTest.onload = function () {
+        if (glForTesting)
+            testWebpTextureUpload(glForTesting);
+        glForTesting = null;
+        webpImgTestOnloadComplete = true;
+    };
+    webpImgTest.onerror = function () {
+        webpCheckComplete = true;
+        glForTesting = null;
+    };
+    webpImgTest.src = 'data:image/webp;base64,UklGRh4AAABXRUJQVlA4TBEAAAAvAQAAAAfQ//73v/+BiOh/AAA=';
+}
+function testSupport(gl) {
+    if (webpCheckComplete || !webpImgTest)
+        return;
+    if (webpImgTestOnloadComplete) {
+        testWebpTextureUpload(gl);
+    } else {
+        glForTesting = gl;
+    }
+}
+function testWebpTextureUpload(gl) {
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    try {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, webpImgTest);
+        if (gl.isContextLost())
+            return;
+        exported.supported = true;
+    } catch (e) {
+    }
+    gl.deleteTexture(texture);
+    webpCheckComplete = true;
+}
+
+const SKU_ID = '01';
+function createSkuToken() {
+    const TOKEN_VERSION = '1';
+    const base62chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    let sessionRandomizer = '';
+    for (let i = 0; i < 10; i++) {
+        sessionRandomizer += base62chars[Math.floor(Math.random() * 62)];
+    }
+    const expiration = 12 * 60 * 60 * 1000;
+    const token = [
+        TOKEN_VERSION,
+        SKU_ID,
+        sessionRandomizer
+    ].join('');
+    const tokenExpiresAt = Date.now() + expiration;
+    return {
+        token,
+        tokenExpiresAt
+    };
+}
+
+const AUTH_ERR_MSG = 'NO_ACCESS_TOKEN';
+class RequestManager {
+    constructor(transformRequestFn, customAccessToken, silenceAuthErrors) {
+        this._transformRequestFn = transformRequestFn;
+        this._customAccessToken = customAccessToken;
+        this._silenceAuthErrors = !!silenceAuthErrors;
+        this._createSkuToken();
+    }
+    _createSkuToken() {
+        const skuToken = createSkuToken();
+        this._skuToken = skuToken.token;
+        this._skuTokenExpiresAt = skuToken.tokenExpiresAt;
+    }
+    _isSkuTokenExpired() {
+        return Date.now() > this._skuTokenExpiresAt;
+    }
+    transformRequest(url, type) {
+        if (this._transformRequestFn) {
+            return this._transformRequestFn(url, type) || { url };
+        }
+        return { url };
+    }
+    normalizeStyleURL(url, accessToken) {
+        if (!isMapboxURL(url))
+            return url;
+        const urlObject = parseUrl(url);
+        urlObject.path = `/styles/v1${ urlObject.path }`;
+        return this._makeAPIURL(urlObject, this._customAccessToken || accessToken);
+    }
+    normalizeGlyphsURL(url, accessToken) {
+        if (!isMapboxURL(url))
+            return url;
+        const urlObject = parseUrl(url);
+        urlObject.path = `/fonts/v1${ urlObject.path }`;
+        return this._makeAPIURL(urlObject, this._customAccessToken || accessToken);
+    }
+    normalizeSourceURL(url, accessToken, language, worldview) {
+        if (!isMapboxURL(url))
+            return url;
+        const urlObject = parseUrl(url);
+        urlObject.path = `/v4/${ urlObject.authority }.json`;
+        urlObject.params.push('secure');
+        if (language) {
+            urlObject.params.push(`language=${ language }`);
+        }
+        if (worldview) {
+            urlObject.params.push(`worldview=${ worldview }`);
+        }
+        return this._makeAPIURL(urlObject, this._customAccessToken || accessToken);
+    }
+    normalizeSpriteURL(url, format, extension, accessToken) {
+        const urlObject = parseUrl(url);
+        if (!isMapboxURL(url)) {
+            urlObject.path += `${ format }${ extension }`;
+            return formatUrl(urlObject);
+        }
+        urlObject.path = `/styles/v1${ urlObject.path }/sprite${ format }${ extension }`;
+        return this._makeAPIURL(urlObject, this._customAccessToken || accessToken);
+    }
+    normalizeTileURL(tileURL, use2x, rasterTileSize) {
+        if (this._isSkuTokenExpired()) {
+            this._createSkuToken();
+        }
+        if (tileURL && !isMapboxURL(tileURL))
+            return tileURL;
+        const urlObject = parseUrl(tileURL);
+        const imageExtensionRe = /(\.(png|jpg)\d*)(?=$)/;
+        const extension = exported.supported ? '.webp' : '$1';
+        const use2xAs512 = rasterTileSize && urlObject.authority !== 'raster' && rasterTileSize === 512;
+        const suffix = use2x || use2xAs512 ? '@2x' : '';
+        urlObject.path = urlObject.path.replace(imageExtensionRe, `${ suffix }${ extension }`);
+        if (urlObject.authority === 'raster') {
+            urlObject.path = `/${ config.RASTER_URL_PREFIX }${ urlObject.path }`;
+        } else {
+            const tileURLAPIPrefixRe = /^.+\/v4\//;
+            urlObject.path = urlObject.path.replace(tileURLAPIPrefixRe, '/');
+            urlObject.path = `/${ config.TILE_URL_VERSION }${ urlObject.path }`;
+        }
+        const accessToken = this._customAccessToken || getAccessToken(urlObject.params) || config.ACCESS_TOKEN;
+        if (config.REQUIRE_ACCESS_TOKEN && accessToken && this._skuToken) {
+            urlObject.params.push(`sku=${ this._skuToken }`);
+        }
+        return this._makeAPIURL(urlObject, accessToken);
+    }
+    canonicalizeTileURL(url, removeAccessToken) {
+        const extensionRe = /\.[\w]+$/;
+        const urlObject = parseUrl(url);
+        if (!urlObject.path.match(/^(\/v4\/|\/raster\/v1\/)/) || !urlObject.path.match(extensionRe)) {
+            return url;
+        }
+        let result = 'mapbox://';
+        if (urlObject.path.match(/^\/raster\/v1\//)) {
+            const rasterPrefix = `/${ config.RASTER_URL_PREFIX }/`;
+            result += `raster/${ urlObject.path.replace(rasterPrefix, '') }`;
+        } else {
+            const tilesPrefix = `/${ config.TILE_URL_VERSION }/`;
+            result += `tiles/${ urlObject.path.replace(tilesPrefix, '') }`;
+        }
+        let params = urlObject.params;
+        if (removeAccessToken) {
+            params = params.filter(p => !p.match(/^access_token=/));
+        }
+        if (params.length)
+            result += `?${ params.join('&') }`;
+        return result;
+    }
+    canonicalizeTileset(tileJSON, sourceURL) {
+        const removeAccessToken = sourceURL ? isMapboxURL(sourceURL) : false;
+        const canonical = [];
+        for (const url of tileJSON.tiles || []) {
+            if (isMapboxHTTPURL(url)) {
+                canonical.push(this.canonicalizeTileURL(url, removeAccessToken));
+            } else {
+                canonical.push(url);
+            }
+        }
+        return canonical;
+    }
+    _makeAPIURL(urlObject, accessToken) {
+        const help = 'See https://www.mapbox.com/api-documentation/#access-tokens-and-token-scopes';
+        const apiUrlObject = parseUrl(config.API_URL);
+        urlObject.protocol = apiUrlObject.protocol;
+        urlObject.authority = apiUrlObject.authority;
+        if (urlObject.protocol === 'http') {
+            const i = urlObject.params.indexOf('secure');
+            if (i >= 0)
+                urlObject.params.splice(i, 1);
+        }
+        if (apiUrlObject.path !== '/') {
+            urlObject.path = `${ apiUrlObject.path }${ urlObject.path }`;
+        }
+        if (!config.REQUIRE_ACCESS_TOKEN)
+            return formatUrl(urlObject);
+        accessToken = accessToken || config.ACCESS_TOKEN;
+        if (!this._silenceAuthErrors) {
+            if (!accessToken)
+                throw new Error(`An API access token is required to use Mapbox GL. ${ help }`);
+            if (accessToken[0] === 's')
+                throw new Error(`Use a public access token (pk.*) with Mapbox GL, not a secret access token (sk.*). ${ help }`);
+        }
+        urlObject.params = urlObject.params.filter(d => d.indexOf('access_token') === -1);
+        urlObject.params.push(`access_token=${ accessToken || '' }`);
+        return formatUrl(urlObject);
+    }
+}
+function isMapboxURL(url) {
+    return url.indexOf('mapbox:') === 0;
+}
+function isMapboxHTTPURL(url) {
+    return config.API_URL_REGEX.test(url);
+}
+function hasCacheDefeatingSku(url) {
+    return url.indexOf('sku=') > 0 && isMapboxHTTPURL(url);
+}
+function getAccessToken(params) {
+    for (const param of params) {
+        const match = param.match(/^access_token=(.*)$/);
+        if (match) {
+            return match[1];
+        }
+    }
+    return null;
+}
+const urlRe = /^(\w+):\/\/([^/?]*)(\/[^?]+)?\??(.+)?/;
+function parseUrl(url) {
+    const parts = url.match(urlRe);
+    if (!parts) {
+        throw new Error('Unable to parse URL object');
+    }
+    return {
+        protocol: parts[1],
+        authority: parts[2],
+        path: parts[3] || '/',
+        params: parts[4] ? parts[4].split('&') : []
+    };
+}
+function formatUrl(obj) {
+    const params = obj.params.length ? `?${ obj.params.join('&') }` : '';
+    return `${ obj.protocol }://${ obj.authority }${ obj.path }${ params }`;
+}
+const telemEventKey = 'mapbox.eventData';
+function parseAccessToken(accessToken) {
+    if (!accessToken) {
+        return null;
+    }
+    const parts = accessToken.split('.');
+    if (!parts || parts.length !== 3) {
+        return null;
+    }
+    try {
+        const jsonData = JSON.parse(b64DecodeUnicode(parts[1]));
+        return jsonData;
+    } catch (e) {
+        return null;
+    }
+}
+class TelemetryEvent {
+    constructor(type) {
+        this.type = type;
+        this.anonId = null;
+        this.eventData = {};
+        this.queue = [];
+        this.pendingRequest = null;
+    }
+    getStorageKey(domain) {
+        const tokenData = parseAccessToken(config.ACCESS_TOKEN);
+        let u = '';
+        if (tokenData && tokenData['u']) {
+            u = b64EncodeUnicode(tokenData['u']);
+        } else {
+            u = config.ACCESS_TOKEN || '';
+        }
+        return domain ? `${ telemEventKey }.${ domain }:${ u }` : `${ telemEventKey }:${ u }`;
+    }
+    fetchEventData() {
+        const isLocalStorageAvailable = storageAvailable('localStorage');
+        const storageKey = this.getStorageKey();
+        const uuidKey = this.getStorageKey('uuid');
+        if (isLocalStorageAvailable) {
+            try {
+                const data = window$1.localStorage.getItem(storageKey);
+                if (data) {
+                    this.eventData = JSON.parse(data);
+                }
+                const uuid = window$1.localStorage.getItem(uuidKey);
+                if (uuid)
+                    this.anonId = uuid;
+            } catch (e) {
+                warnOnce('Unable to read from LocalStorage');
+            }
+        }
+    }
+    saveEventData() {
+        const isLocalStorageAvailable = storageAvailable('localStorage');
+        const storageKey = this.getStorageKey();
+        const uuidKey = this.getStorageKey('uuid');
+        if (isLocalStorageAvailable) {
+            try {
+                window$1.localStorage.setItem(uuidKey, this.anonId);
+                if (Object.keys(this.eventData).length >= 1) {
+                    window$1.localStorage.setItem(storageKey, JSON.stringify(this.eventData));
+                }
+            } catch (e) {
+                warnOnce('Unable to write to LocalStorage');
+            }
+        }
+    }
+    processRequests(_) {
+    }
+    postEvent(timestamp, additionalPayload, callback, customAccessToken) {
+        if (!config.EVENTS_URL)
+            return;
+        const eventsUrlObject = parseUrl(config.EVENTS_URL);
+        eventsUrlObject.params.push(`access_token=${ customAccessToken || config.ACCESS_TOKEN || '' }`);
+        const payload = {
+            event: this.type,
+            created: new Date(timestamp).toISOString(),
+            sdkIdentifier: 'mapbox-gl-js',
+            sdkVersion: version,
+            skuId: SKU_ID,
+            userId: this.anonId
+        };
+        const finalPayload = additionalPayload ? extend$2(payload, additionalPayload) : payload;
+        const request = {
+            url: formatUrl(eventsUrlObject),
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify([finalPayload])
+        };
+        this.pendingRequest = postData(request, error => {
+            this.pendingRequest = null;
+            callback(error);
+            this.saveEventData();
+            this.processRequests(customAccessToken);
+        });
+    }
+    queueRequest(event, customAccessToken) {
+        this.queue.push(event);
+        this.processRequests(customAccessToken);
+    }
+}
+class MapLoadEvent extends TelemetryEvent {
+    constructor() {
+        super('map.load');
+        this.success = {};
+        this.skuToken = '';
+    }
+    postMapLoadEvent(mapId, skuToken, customAccessToken, callback) {
+        this.skuToken = skuToken;
+        this.errorCb = callback;
+        if (config.EVENTS_URL) {
+            if (customAccessToken || config.ACCESS_TOKEN) {
+                this.queueRequest({
+                    id: mapId,
+                    timestamp: Date.now()
+                }, customAccessToken);
+            } else {
+                this.errorCb(new Error(AUTH_ERR_MSG));
+            }
+        }
+    }
+    processRequests(customAccessToken) {
+        if (this.pendingRequest || this.queue.length === 0)
+            return;
+        const {id, timestamp} = this.queue.shift();
+        if (id && this.success[id])
+            return;
+        if (!this.anonId) {
+            this.fetchEventData();
+        }
+        if (!validateUuid(this.anonId)) {
+            this.anonId = uuid();
+        }
+        this.postEvent(timestamp, { skuToken: this.skuToken }, err => {
+            if (err) {
+                this.errorCb(err);
+            } else {
+                if (id)
+                    this.success[id] = true;
+            }
+        }, customAccessToken);
+    }
+}
+class MapSessionAPI extends TelemetryEvent {
+    constructor() {
+        super('map.auth');
+        this.success = {};
+        this.skuToken = '';
+    }
+    getSession(timestamp, token, callback, customAccessToken) {
+        if (!config.API_URL || !config.SESSION_PATH)
+            return;
+        const authUrlObject = parseUrl(config.API_URL + config.SESSION_PATH);
+        authUrlObject.params.push(`sku=${ token || '' }`);
+        authUrlObject.params.push(`access_token=${ customAccessToken || config.ACCESS_TOKEN || '' }`);
+        const request = {
+            url: formatUrl(authUrlObject),
+            headers: { 'Content-Type': 'text/plain' }
+        };
+        this.pendingRequest = getData(request, error => {
+            this.pendingRequest = null;
+            callback(error);
+            this.saveEventData();
+            this.processRequests(customAccessToken);
+        });
+    }
+    getSessionAPI(mapId, skuToken, customAccessToken, callback) {
+        this.skuToken = skuToken;
+        this.errorCb = callback;
+        if (config.SESSION_PATH && config.API_URL) {
+            if (customAccessToken || config.ACCESS_TOKEN) {
+                this.queueRequest({
+                    id: mapId,
+                    timestamp: Date.now()
+                }, customAccessToken);
+            } else {
+                this.errorCb(new Error(AUTH_ERR_MSG));
+            }
+        }
+    }
+    processRequests(customAccessToken) {
+        if (this.pendingRequest || this.queue.length === 0)
+            return;
+        const {id, timestamp} = this.queue.shift();
+        if (id && this.success[id])
+            return;
+        this.getSession(timestamp, this.skuToken, err => {
+            if (err) {
+                this.errorCb(err);
+            } else {
+                if (id)
+                    this.success[id] = true;
+            }
+        }, customAccessToken);
+    }
+}
+class TurnstileEvent extends TelemetryEvent {
+    constructor(customAccessToken) {
+        super('appUserTurnstile');
+        this._customAccessToken = customAccessToken;
+    }
+    postTurnstileEvent(tileUrls, customAccessToken) {
+        if (config.EVENTS_URL && config.ACCESS_TOKEN && Array.isArray(tileUrls) && tileUrls.some(url => isMapboxURL(url) || isMapboxHTTPURL(url))) {
+            this.queueRequest(Date.now(), customAccessToken);
+        }
+    }
+    processRequests(customAccessToken) {
+        if (this.pendingRequest || this.queue.length === 0) {
+            return;
+        }
+        if (!this.anonId || !this.eventData.lastSuccess || !this.eventData.tokenU) {
+            this.fetchEventData();
+        }
+        const tokenData = parseAccessToken(config.ACCESS_TOKEN);
+        const tokenU = tokenData ? tokenData['u'] : config.ACCESS_TOKEN;
+        let dueForEvent = tokenU !== this.eventData.tokenU;
+        if (!validateUuid(this.anonId)) {
+            this.anonId = uuid();
+            dueForEvent = true;
+        }
+        const nextUpdate = this.queue.shift();
+        if (this.eventData.lastSuccess) {
+            const lastUpdate = new Date(this.eventData.lastSuccess);
+            const nextDate = new Date(nextUpdate);
+            const daysElapsed = (nextUpdate - this.eventData.lastSuccess) / (24 * 60 * 60 * 1000);
+            dueForEvent = dueForEvent || daysElapsed >= 1 || daysElapsed < -1 || lastUpdate.getDate() !== nextDate.getDate();
+        } else {
+            dueForEvent = true;
+        }
+        if (!dueForEvent) {
+            this.processRequests();
+            return;
+        }
+        this.postEvent(nextUpdate, { 'enabled.telemetry': false }, err => {
+            if (!err) {
+                this.eventData.lastSuccess = nextUpdate;
+                this.eventData.tokenU = tokenU;
+            }
+        }, customAccessToken);
+    }
+}
+const turnstileEvent_ = new TurnstileEvent();
+const postTurnstileEvent = turnstileEvent_.postTurnstileEvent.bind(turnstileEvent_);
+const mapLoadEvent_ = new MapLoadEvent();
+const postMapLoadEvent = mapLoadEvent_.postMapLoadEvent.bind(mapLoadEvent_);
+const mapSessionAPI_ = new MapSessionAPI();
+const getMapSessionAPI = mapSessionAPI_.getSessionAPI.bind(mapSessionAPI_);
+const authenticatedMaps = new Set();
+function storeAuthState(gl, state) {
+    if (state) {
+        authenticatedMaps.add(gl);
+    } else {
+        authenticatedMaps.delete(gl);
+    }
+}
+function isMapAuthenticated(gl) {
+    return authenticatedMaps.has(gl);
+}
+function removeAuthState(gl) {
+    authenticatedMaps.delete(gl);
+}
+
+const CACHE_NAME = 'mapbox-tiles';
+let cacheLimit = 500;
+let cacheCheckThreshold = 50;
+const MIN_TIME_UNTIL_EXPIRY = 1000 * 60 * 7;
+let sharedCaches = {};
+function getCacheName(url) {
+    const queryParams = getQueryParameters(url);
+    let language;
+    let worldview;
+    if (queryParams) {
+        queryParams.forEach(param => {
+            const entry = param.split('=');
+            if (entry[0] === 'language') {
+                language = entry[1];
+            } else if (entry[0] === 'worldview') {
+                worldview = entry[1];
+            }
+        });
+    }
+    let cacheName = CACHE_NAME;
+    if (language)
+        cacheName += `-${ language }`;
+    if (worldview)
+        cacheName += `-${ worldview }`;
+    return cacheName;
+}
+function cacheOpen(cacheName) {
+    if (window$1.caches && !sharedCaches[cacheName]) {
+        sharedCaches[cacheName] = window$1.caches.open(cacheName);
+    }
+}
+let responseConstructorSupportsReadableStream;
+function prepareBody(response, callback) {
+    if (responseConstructorSupportsReadableStream === undefined) {
+        try {
+            new Response(new ReadableStream());
+            responseConstructorSupportsReadableStream = true;
+        } catch (e) {
+            responseConstructorSupportsReadableStream = false;
+        }
+    }
+    if (responseConstructorSupportsReadableStream) {
+        callback(response.body);
+    } else {
+        response.blob().then(callback);
+    }
+}
+function cachePut(request, response, requestTime) {
+    const cacheName = getCacheName(request.url);
+    cacheOpen(cacheName);
+    if (!sharedCaches[cacheName])
+        return;
+    const options = {
+        status: response.status,
+        statusText: response.statusText,
+        headers: new window$1.Headers()
+    };
+    response.headers.forEach((v, k) => options.headers.set(k, v));
+    const cacheControl = parseCacheControl(response.headers.get('Cache-Control') || '');
+    if (cacheControl['no-store']) {
+        return;
+    }
+    if (cacheControl['max-age']) {
+        options.headers.set('Expires', new Date(requestTime + cacheControl['max-age'] * 1000).toUTCString());
+    }
+    const expires = options.headers.get('Expires');
+    if (!expires)
+        return;
+    const timeUntilExpiry = new Date(expires).getTime() - requestTime;
+    if (timeUntilExpiry < MIN_TIME_UNTIL_EXPIRY)
+        return;
+    prepareBody(response, body => {
+        const clonedResponse = new window$1.Response(body, options);
+        cacheOpen(cacheName);
+        if (!sharedCaches[cacheName])
+            return;
+        sharedCaches[cacheName].then(cache => cache.put(stripQueryParameters(request.url), clonedResponse)).catch(e => warnOnce(e.message));
+    });
+}
+function getQueryParameters(url) {
+    const paramStart = url.indexOf('?');
+    return paramStart > 0 ? url.slice(paramStart + 1).split('&') : [];
+}
+function stripQueryParameters(url) {
+    const start = url.indexOf('?');
+    if (start < 0)
+        return url;
+    const params = getQueryParameters(url);
+    const filteredParams = params.filter(param => {
+        const entry = param.split('=');
+        return entry[0] === 'language' || entry[0] === 'worldview';
+    });
+    if (filteredParams.length) {
+        return `${ url.slice(0, start) }?${ filteredParams.join('&') }`;
+    }
+    return url.slice(0, start);
+}
+function cacheGet(request, callback) {
+    const cacheName = getCacheName(request.url);
+    cacheOpen(cacheName);
+    if (!sharedCaches[cacheName])
+        return callback(null);
+    const strippedURL = stripQueryParameters(request.url);
+    sharedCaches[cacheName].then(cache => {
+        cache.match(strippedURL).then(response => {
+            const fresh = isFresh(response);
+            cache.delete(strippedURL);
+            if (fresh) {
+                cache.put(strippedURL, response.clone());
+            }
+            callback(null, response, fresh);
+        }).catch(callback);
+    }).catch(callback);
+}
+function isFresh(response) {
+    if (!response)
+        return false;
+    const expires = new Date(response.headers.get('Expires') || 0);
+    const cacheControl = parseCacheControl(response.headers.get('Cache-Control') || '');
+    return expires > Date.now() && !cacheControl['no-cache'];
+}
+let globalEntryCounter = Infinity;
+function cacheEntryPossiblyAdded(dispatcher) {
+    globalEntryCounter++;
+    if (globalEntryCounter > cacheCheckThreshold) {
+        dispatcher.getActor().send('enforceCacheSizeLimit', cacheLimit);
+        globalEntryCounter = 0;
+    }
+}
+function enforceCacheSizeLimit(limit) {
+    for (const sharedCache in sharedCaches) {
+        cacheOpen(sharedCache);
+        sharedCaches[sharedCache].then(cache => {
+            cache.keys().then(keys => {
+                for (let i = 0; i < keys.length - limit; i++) {
+                    cache.delete(keys[i]);
+                }
+            });
+        });
+    }
+}
+function clearTileCache(callback) {
+    const promises = [];
+    for (const cache in sharedCaches) {
+        promises.push(window$1.caches.delete(cache));
+        delete sharedCaches[cache];
+    }
+    if (callback) {
+        Promise.all(promises).catch(callback).then(() => callback());
+    }
+}
+function setCacheLimits(limit, checkThreshold) {
+    cacheLimit = limit;
+    cacheCheckThreshold = checkThreshold;
+}
 
 const ResourceType = {
     Unknown: 'Unknown',
@@ -6550,7 +6550,7 @@ function makeFetchRequest(requestParameters, callback) {
         }
     };
 }
-function makeFetchRequestForOffline(flightPlanId, requestParameters, callback) {
+function makeFetchRequestForOffline(key, requestParameters, callback) {
     const controller = new window$1.AbortController();
     const request = new window$1.Request(requestParameters.url, {
         method: requestParameters.method || 'GET',
@@ -6598,16 +6598,16 @@ function makeFetchRequestForOffline(flightPlanId, requestParameters, callback) {
                 return;
             const url = stripQueryParameters(request.url);
             const cachedTile = await getCachedTile(url);
-            let flightPlanIds = cachedTile ? cachedTile.flightPlanIds : [];
+            let keys = cachedTile ? cachedTile.keys : [];
             if (cachedTile) {
                 await db.tiles.where('url').equalsIgnoreCase(url).delete();
             }
-            flightPlanIds.push(flightPlanId);
-            flightPlanIds = flightPlanIds.filter(onlyUnique);
+            keys.push(key);
+            keys = keys.filter(onlyUnique);
             try {
                 await db.tiles.add({
                     url,
-                    flightPlanIds,
+                    keys,
                     blob: result
                 });
             } catch (error) {
@@ -6675,7 +6675,7 @@ function makeXMLHttpRequest(requestParameters, callback) {
     xhr.send(requestParameters.body);
     return { cancel: () => xhr.abort() };
 }
-function makeXMLHttpRequestForOffline(flightPlanId, requestParameters, callback) {
+function makeXMLHttpRequestForOffline(key, requestParameters, callback) {
     const xhr = new window$1.XMLHttpRequest();
     xhr.open(requestParameters.method || 'GET', requestParameters.url, true);
     if (requestParameters.type === 'arrayBuffer') {
@@ -6722,17 +6722,17 @@ const makeRequest = function (requestParameters, callback) {
     }
     return makeXMLHttpRequest(requestParameters, callback);
 };
-const makeRequestForOffline = function (flightPlanId, requestParameters, callback) {
+const makeRequestForOffline = function (key, requestParameters, callback) {
     if (!isFileURL(requestParameters.url)) {
         if (window$1.fetch && window$1.Request && window$1.AbortController && window$1.Request.prototype.hasOwnProperty('signal')) {
-            return makeFetchRequestForOffline(flightPlanId, requestParameters, callback);
+            return makeFetchRequestForOffline(key, requestParameters, callback);
         }
         if (isWorker() && self.worker && self.worker.actor) {
             const queueOnMainThread = true;
             return self.worker.actor.send('getResourceForOffline', requestParameters, callback, undefined, queueOnMainThread);
         }
     }
-    return makeXMLHttpRequestForOffline(flightPlanId, requestParameters, callback);
+    return makeXMLHttpRequestForOffline(key, requestParameters, callback);
 };
 const getJSON = function (requestParameters, callback) {
     return makeRequest(extend$2(requestParameters, { type: 'json' }), callback);
@@ -6740,8 +6740,8 @@ const getJSON = function (requestParameters, callback) {
 const getArrayBuffer = function (requestParameters, callback) {
     return makeRequest(extend$2(requestParameters, { type: 'arrayBuffer' }), callback);
 };
-const getArrayBufferForOffline = function (flightPlanId, requestParameters, callback) {
-    return makeRequestForOffline(flightPlanId, extend$2(requestParameters, { type: 'arrayBuffer' }), callback);
+const getArrayBufferForOffline = function (key, requestParameters, callback) {
+    return makeRequestForOffline(key, extend$2(requestParameters, { type: 'arrayBuffer' }), callback);
 };
 const postData = function (requestParameters, callback) {
     return makeRequest(extend$2(requestParameters, { method: 'POST' }), callback);
@@ -9629,65 +9629,6 @@ class Step {
     }
 }
 var Step$1 = Step;
-
-var unitbezier = UnitBezier;
-function UnitBezier(p1x, p1y, p2x, p2y) {
-    this.cx = 3 * p1x;
-    this.bx = 3 * (p2x - p1x) - this.cx;
-    this.ax = 1 - this.cx - this.bx;
-    this.cy = 3 * p1y;
-    this.by = 3 * (p2y - p1y) - this.cy;
-    this.ay = 1 - this.cy - this.by;
-    this.p1x = p1x;
-    this.p1y = p2y;
-    this.p2x = p2x;
-    this.p2y = p2y;
-}
-UnitBezier.prototype.sampleCurveX = function (t) {
-    return ((this.ax * t + this.bx) * t + this.cx) * t;
-};
-UnitBezier.prototype.sampleCurveY = function (t) {
-    return ((this.ay * t + this.by) * t + this.cy) * t;
-};
-UnitBezier.prototype.sampleCurveDerivativeX = function (t) {
-    return (3 * this.ax * t + 2 * this.bx) * t + this.cx;
-};
-UnitBezier.prototype.solveCurveX = function (x, epsilon) {
-    if (typeof epsilon === 'undefined')
-        epsilon = 0.000001;
-    var t0, t1, t2, x2, i;
-    for (t2 = x, i = 0; i < 8; i++) {
-        x2 = this.sampleCurveX(t2) - x;
-        if (Math.abs(x2) < epsilon)
-            return t2;
-        var d2 = this.sampleCurveDerivativeX(t2);
-        if (Math.abs(d2) < 0.000001)
-            break;
-        t2 = t2 - x2 / d2;
-    }
-    t0 = 0;
-    t1 = 1;
-    t2 = x;
-    if (t2 < t0)
-        return t0;
-    if (t2 > t1)
-        return t1;
-    while (t0 < t1) {
-        x2 = this.sampleCurveX(t2);
-        if (Math.abs(x2 - x) < epsilon)
-            return t2;
-        if (x > x2) {
-            t0 = t2;
-        } else {
-            t1 = t2;
-        }
-        t2 = (t1 - t0) * 0.5 + t0;
-    }
-    return t2;
-};
-UnitBezier.prototype.solve = function (x, epsilon) {
-    return this.sampleCurveY(this.solveCurveX(x, epsilon));
-};
 
 function number(a, b, t) {
     return a * (1 - t) + b * t;
@@ -29774,9 +29715,9 @@ class SourceCache extends Evented {
         tile.isSymbolTile = this._onlySymbols;
         return this._source.loadTile(tile, callback);
     }
-    _loadTileForOffline(flightPlanId, tile, callback) {
+    _loadTileForOffline(key, tile, callback) {
         tile.isSymbolTile = this._onlySymbols;
-        return this._source.loadTileForOffline(flightPlanId, tile, callback);
+        return this._source.loadTileForOffline(key, tile, callback);
     }
     _unloadTile(tile) {
         if (this._source.unloadTile)
@@ -30411,7 +30352,7 @@ class SourceCache extends Evented {
             });
         }, callback);
     }
-    preloadTilesForOffline(flightPlanId, transform, callback) {
+    preloadTilesForOffline(key, transform, callback) {
         const coveringTilesIDs = new Map();
         const transforms = Array.isArray(transform) ? transform : [transform];
         const terrain = this.map.painter.terrain;
@@ -30435,7 +30376,7 @@ class SourceCache extends Evented {
         const tileIDs = Array.from(coveringTilesIDs.values());
         asyncAll(tileIDs, (tileID, done) => {
             const tile = new Tile(tileID, this._source.tileSize * tileID.overscaleFactor(), this.transform.tileZoom, this.map.painter, this._isRaster);
-            this._loadTileForOffline(flightPlanId, tile, err => {
+            this._loadTileForOffline(key, tile, err => {
                 if (this._source.type === 'raster-dem' && tile.dem)
                     this._backfillDEM(tile);
                 done(err, tile);
@@ -31157,7 +31098,7 @@ function loadVectorTile(params, callback, skipParse) {
 function loadVectorTileForOffline(params, callback, skipParse) {
     const key = JSON.stringify(params.request);
     const makeRequest = callback => {
-        const request = getArrayBufferForOffline(params.flightPlanId, params.request, (err, data, cacheControl, expires) => {
+        const request = getArrayBufferForOffline(params.key, params.request, (err, data, cacheControl, expires) => {
             if (err) {
                 callback(err);
             } else if (data) {
@@ -31497,7 +31438,7 @@ exports.getAABBPointSquareDist = getAABBPointSquareDist;
 exports.getAnchorAlignment = getAnchorAlignment;
 exports.getAnchorJustification = getAnchorJustification;
 exports.getBounds = getBounds;
-exports.getCachedTilesForFlightPlan = getCachedTilesForFlightPlan;
+exports.getCachedTilesForKey = getCachedTilesForKey;
 exports.getColumn = getColumn;
 exports.getGridMatrix = getGridMatrix;
 exports.getImage = getImage;
@@ -35943,11 +35884,11 @@ class VectorTileSource extends ref_properties.Evented {
             }
         }
     }
-    loadTileForOffline(flightPlanId, tile, callback) {
+    loadTileForOffline(key, tile, callback) {
         const url = this.map._requestManager.normalizeTileURL(tile.tileID.canonical.url(this.tiles, this.scheme));
         const request = this.map._requestManager.transformRequest(url, ref_properties.ResourceType.Tile);
         const params = {
-            flightPlanId,
+            key,
             request,
             data: undefined,
             uid: tile.uid,
@@ -36003,7 +35944,7 @@ class VectorTileSource extends ref_properties.Evented {
             ref_properties.cacheEntryPossiblyAdded(this.dispatcher);
             callback(null);
             if (tile.reloadCallback) {
-                this.loadTileForOffline(flightPlanId, tile, tile.reloadCallback);
+                this.loadTileForOffline(key, tile, tile.reloadCallback);
                 tile.reloadCallback = null;
             }
         }
@@ -41113,135 +41054,135 @@ Style.getSourceType = getType;
 Style.setSourceType = setType;
 Style.registerForPluginStateChange = ref_properties.registerForPluginStateChange;
 
-var preludeCommon = "\n#define EPSILON 0.0000001\n#define PI 3.141592653589793\n#define EXTENT 8192.0\n#define HALF_PI PI/2.0\n#define QUARTER_PI PI/4.0\n#define RAD_TO_DEG 180.0/PI\n#define DEG_TO_RAD PI/180.0\n#define GLOBE_RADIUS EXTENT/PI/2.0";
+var preludeCommon = "\n#define EPSILON 0.0000001\r\n#define PI 3.141592653589793\r\n#define EXTENT 8192.0\r\n#define HALF_PI PI/2.0\r\n#define QUARTER_PI PI/4.0\r\n#define RAD_TO_DEG 180.0/PI\r\n#define DEG_TO_RAD PI/180.0\r\n#define GLOBE_RADIUS EXTENT/PI/2.0";
 
-var preludeFrag = "\nhighp vec3 hash(highp vec2 p) {highp vec3 p3=fract(p.xyx*vec3(443.8975,397.2973,491.1871));p3+=dot(p3,p3.yxz+19.19);return fract((p3.xxy+p3.yzz)*p3.zyx);}vec3 dither(vec3 color,highp vec2 seed) {vec3 rnd=hash(seed)+hash(seed+0.59374)-0.5;return color+rnd/255.0;}\n#ifdef TERRAIN\nhighp vec4 pack_depth(highp float ndc_z) {highp float depth=ndc_z*0.5+0.5;const highp vec4 bit_shift=vec4(256.0*256.0*256.0,256.0*256.0,256.0,1.0);const highp vec4 bit_mask =vec4(0.0,1.0/256.0,1.0/256.0,1.0/256.0);highp vec4 res=fract(depth*bit_shift);res-=res.xxyz*bit_mask;return res;}\n#endif";
+var preludeFrag = "\nhighp vec3 hash(highp vec2 p) {\r\nhighp vec3 p3=fract(p.xyx*vec3(443.8975,397.2973,491.1871));\r\np3+=dot(p3,p3.yxz+19.19);\r\nreturn fract((p3.xxy+p3.yzz)*p3.zyx);\r\n}\r\nvec3 dither(vec3 color,highp vec2 seed) {\r\nvec3 rnd=hash(seed)+hash(seed+0.59374)-0.5;\r\nreturn color+rnd/255.0;\r\n}\r\n#ifdef TERRAIN\nhighp vec4 pack_depth(highp float ndc_z) {\r\nhighp float depth=ndc_z*0.5+0.5;\r\nconst highp vec4 bit_shift=vec4(256.0*256.0*256.0,256.0*256.0,256.0,1.0);\r\nconst highp vec4 bit_mask =vec4(0.0,1.0/256.0,1.0/256.0,1.0/256.0);\r\nhighp vec4 res=fract(depth*bit_shift);\r\nres-=res.xxyz*bit_mask;\r\nreturn res;\r\n}\r\n#endif";
 
-var preludeVert = "\nfloat wrap(float n,float min,float max) {float d=max-min;float w=mod(mod(n-min,d)+d,d)+min;return (w==min) ? max : w;}\n#ifdef PROJECTION_GLOBE_VIEW\nvec3 mercator_tile_position(mat4 matrix,vec2 tile_anchor,vec3 tile_id,vec2 mercator_center) {\n#ifndef PROJECTED_POS_ON_VIEWPORT\nfloat tiles=tile_id.z;vec2 mercator=(tile_anchor/EXTENT+tile_id.xy)/tiles;mercator-=mercator_center;mercator.x=wrap(mercator.x,-0.5,0.5);vec4 mercator_tile=vec4(mercator.xy*EXTENT,EXTENT/(2.0*PI),1.0);mercator_tile=matrix*mercator_tile;return mercator_tile.xyz;\n#else\nreturn vec3(0.0);\n#endif\n}vec3 mix_globe_mercator(vec3 globe,vec3 mercator,float t) {return mix(globe,mercator,t);}mat3 globe_mercator_surface_vectors(vec3 pos_normal,vec3 up_dir,float zoom_transition) {vec3 normal=zoom_transition==0.0 ? pos_normal : normalize(mix(pos_normal,up_dir,zoom_transition));vec3 xAxis=normalize(vec3(normal.z,0.0,-normal.x));vec3 yAxis=normalize(cross(normal,xAxis));return mat3(xAxis,yAxis,normal);}\n#endif\nvec2 unpack_float(const float packedValue) {int packedIntValue=int(packedValue);int v0=packedIntValue/256;return vec2(v0,packedIntValue-v0*256);}vec2 unpack_opacity(const float packedOpacity) {int intOpacity=int(packedOpacity)/2;return vec2(float(intOpacity)/127.0,mod(packedOpacity,2.0));}vec4 decode_color(const vec2 encodedColor) {return vec4(\nunpack_float(encodedColor[0])/255.0,unpack_float(encodedColor[1])/255.0\n);}float unpack_mix_vec2(const vec2 packedValue,const float t) {return mix(packedValue[0],packedValue[1],t);}vec4 unpack_mix_color(const vec4 packedColors,const float t) {vec4 minColor=decode_color(vec2(packedColors[0],packedColors[1]));vec4 maxColor=decode_color(vec2(packedColors[2],packedColors[3]));return mix(minColor,maxColor,t);}vec2 get_pattern_pos(const vec2 pixel_coord_upper,const vec2 pixel_coord_lower,const vec2 pattern_size,const float tile_units_to_pixels,const vec2 pos) {vec2 offset=mod(mod(mod(pixel_coord_upper,pattern_size)*256.0,pattern_size)*256.0+pixel_coord_lower,pattern_size);return (tile_units_to_pixels*pos+offset)/pattern_size;}const vec4 AWAY=vec4(-1000.0,-1000.0,-1000.0,1);//Normalized device coordinate that is not rendered.";
+var preludeVert = "\nfloat wrap(float n,float min,float max) {\r\nfloat d=max-min;\r\nfloat w=mod(mod(n-min,d)+d,d)+min;\r\nreturn (w==min) ? max : w;\r\n}\r\n#ifdef PROJECTION_GLOBE_VIEW\r\nvec3 mercator_tile_position(mat4 matrix,vec2 tile_anchor,vec3 tile_id,vec2 mercator_center) {\r\n#ifndef PROJECTED_POS_ON_VIEWPORT\nfloat tiles=tile_id.z;\r\nvec2 mercator=(tile_anchor/EXTENT+tile_id.xy)/tiles;\r\nmercator-=mercator_center;\r\nmercator.x=wrap(mercator.x,-0.5,0.5);\r\nvec4 mercator_tile=vec4(mercator.xy*EXTENT,EXTENT/(2.0*PI),1.0);\r\nmercator_tile=matrix*mercator_tile;\r\nreturn mercator_tile.xyz;\r\n#else\r\nreturn vec3(0.0);\r\n#endif\r\n}\r\nvec3 mix_globe_mercator(vec3 globe,vec3 mercator,float t) {\r\nreturn mix(globe,mercator,t);\r\n}\r\nmat3 globe_mercator_surface_vectors(vec3 pos_normal,vec3 up_dir,float zoom_transition) {\r\nvec3 normal=zoom_transition==0.0 ? pos_normal : normalize(mix(pos_normal,up_dir,zoom_transition));\r\nvec3 xAxis=normalize(vec3(normal.z,0.0,-normal.x));\r\nvec3 yAxis=normalize(cross(normal,xAxis));\r\nreturn mat3(xAxis,yAxis,normal);\r\n}\r\n#endif\nvec2 unpack_float(const float packedValue) {\r\nint packedIntValue=int(packedValue);\r\nint v0=packedIntValue/256;\r\nreturn vec2(v0,packedIntValue-v0*256);\r\n}\r\nvec2 unpack_opacity(const float packedOpacity) {\r\nint intOpacity=int(packedOpacity)/2;\r\nreturn vec2(float(intOpacity)/127.0,mod(packedOpacity,2.0));\r\n}vec4 decode_color(const vec2 encodedColor) {\r\nreturn vec4(\r\nunpack_float(encodedColor[0])/255.0,unpack_float(encodedColor[1])/255.0\r\n);\r\n}float unpack_mix_vec2(const vec2 packedValue,const float t) {\r\nreturn mix(packedValue[0],packedValue[1],t);\r\n}vec4 unpack_mix_color(const vec4 packedColors,const float t) {\r\nvec4 minColor=decode_color(vec2(packedColors[0],packedColors[1]));\r\nvec4 maxColor=decode_color(vec2(packedColors[2],packedColors[3]));\r\nreturn mix(minColor,maxColor,t);\r\n}vec2 get_pattern_pos(const vec2 pixel_coord_upper,const vec2 pixel_coord_lower,const vec2 pattern_size,const float tile_units_to_pixels,const vec2 pos) {\r\nvec2 offset=mod(mod(mod(pixel_coord_upper,pattern_size)*256.0,pattern_size)*256.0+pixel_coord_lower,pattern_size);\r\nreturn (tile_units_to_pixels*pos+offset)/pattern_size;\r\n}\r\nconst vec4 AWAY=vec4(-1000.0,-1000.0,-1000.0,1);//Normalized device coordinate that is not rendered.";
 
-var backgroundFrag = "uniform vec4 u_color;uniform float u_opacity;void main() {vec4 out_color=u_color;\n#ifdef FOG\nout_color=fog_dither(fog_apply_premultiplied(out_color,v_fog_pos));\n#endif\ngl_FragColor=out_color*u_opacity;\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}";
+var backgroundFrag = "uniform vec4 u_color;\r\nuniform float u_opacity;\r\nvoid main() {\r\nvec4 out_color=u_color;\r\n#ifdef FOG\r\nout_color=fog_dither(fog_apply_premultiplied(out_color,v_fog_pos));\r\n#endif\r\ngl_FragColor=out_color*u_opacity;\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\n}";
 
-var backgroundVert = "attribute vec2 a_pos;uniform mat4 u_matrix;void main() {gl_Position=u_matrix*vec4(a_pos,0,1);\n#ifdef FOG\nv_fog_pos=fog_position(a_pos);\n#endif\n}";
+var backgroundVert = "attribute vec2 a_pos;\r\nuniform mat4 u_matrix;\r\nvoid main() {\r\ngl_Position=u_matrix*vec4(a_pos,0,1);\r\n#ifdef FOG\r\nv_fog_pos=fog_position(a_pos);\r\n#endif\r\n}";
 
-var backgroundPatternFrag = "uniform vec2 u_pattern_tl_a;uniform vec2 u_pattern_br_a;uniform vec2 u_pattern_tl_b;uniform vec2 u_pattern_br_b;uniform vec2 u_texsize;uniform float u_mix;uniform float u_opacity;uniform sampler2D u_image;varying vec2 v_pos_a;varying vec2 v_pos_b;void main() {vec2 imagecoord=mod(v_pos_a,1.0);vec2 pos=mix(u_pattern_tl_a/u_texsize,u_pattern_br_a/u_texsize,imagecoord);vec4 color1=texture2D(u_image,pos);vec2 imagecoord_b=mod(v_pos_b,1.0);vec2 pos2=mix(u_pattern_tl_b/u_texsize,u_pattern_br_b/u_texsize,imagecoord_b);vec4 color2=texture2D(u_image,pos2);vec4 out_color=mix(color1,color2,u_mix);\n#ifdef FOG\nout_color=fog_dither(fog_apply_premultiplied(out_color,v_fog_pos));\n#endif\ngl_FragColor=out_color*u_opacity;\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}";
+var backgroundPatternFrag = "uniform vec2 u_pattern_tl_a;\r\nuniform vec2 u_pattern_br_a;\r\nuniform vec2 u_pattern_tl_b;\r\nuniform vec2 u_pattern_br_b;\r\nuniform vec2 u_texsize;\r\nuniform float u_mix;\r\nuniform float u_opacity;\r\nuniform sampler2D u_image;\r\nvarying vec2 v_pos_a;\r\nvarying vec2 v_pos_b;\r\nvoid main() {\r\nvec2 imagecoord=mod(v_pos_a,1.0);\r\nvec2 pos=mix(u_pattern_tl_a/u_texsize,u_pattern_br_a/u_texsize,imagecoord);\r\nvec4 color1=texture2D(u_image,pos);\r\nvec2 imagecoord_b=mod(v_pos_b,1.0);\r\nvec2 pos2=mix(u_pattern_tl_b/u_texsize,u_pattern_br_b/u_texsize,imagecoord_b);\r\nvec4 color2=texture2D(u_image,pos2);\r\nvec4 out_color=mix(color1,color2,u_mix);\r\n#ifdef FOG\r\nout_color=fog_dither(fog_apply_premultiplied(out_color,v_fog_pos));\r\n#endif\r\ngl_FragColor=out_color*u_opacity;\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\n}";
 
-var backgroundPatternVert = "uniform mat4 u_matrix;uniform vec2 u_pattern_size_a;uniform vec2 u_pattern_size_b;uniform vec2 u_pixel_coord_upper;uniform vec2 u_pixel_coord_lower;uniform float u_scale_a;uniform float u_scale_b;uniform float u_tile_units_to_pixels;attribute vec2 a_pos;varying vec2 v_pos_a;varying vec2 v_pos_b;void main() {gl_Position=u_matrix*vec4(a_pos,0,1);v_pos_a=get_pattern_pos(u_pixel_coord_upper,u_pixel_coord_lower,u_scale_a*u_pattern_size_a,u_tile_units_to_pixels,a_pos);v_pos_b=get_pattern_pos(u_pixel_coord_upper,u_pixel_coord_lower,u_scale_b*u_pattern_size_b,u_tile_units_to_pixels,a_pos);\n#ifdef FOG\nv_fog_pos=fog_position(a_pos);\n#endif\n}";
+var backgroundPatternVert = "uniform mat4 u_matrix;\r\nuniform vec2 u_pattern_size_a;\r\nuniform vec2 u_pattern_size_b;\r\nuniform vec2 u_pixel_coord_upper;\r\nuniform vec2 u_pixel_coord_lower;\r\nuniform float u_scale_a;\r\nuniform float u_scale_b;\r\nuniform float u_tile_units_to_pixels;\r\nattribute vec2 a_pos;\r\nvarying vec2 v_pos_a;\r\nvarying vec2 v_pos_b;\r\nvoid main() {\r\ngl_Position=u_matrix*vec4(a_pos,0,1);\r\nv_pos_a=get_pattern_pos(u_pixel_coord_upper,u_pixel_coord_lower,u_scale_a*u_pattern_size_a,u_tile_units_to_pixels,a_pos);\r\nv_pos_b=get_pattern_pos(u_pixel_coord_upper,u_pixel_coord_lower,u_scale_b*u_pattern_size_b,u_tile_units_to_pixels,a_pos);\r\n#ifdef FOG\r\nv_fog_pos=fog_position(a_pos);\r\n#endif\r\n}";
 
-var circleFrag = "varying vec3 v_data;varying float v_visibility;\n#pragma mapbox: define highp vec4 color\n#pragma mapbox: define mediump float radius\n#pragma mapbox: define lowp float blur\n#pragma mapbox: define lowp float opacity\n#pragma mapbox: define highp vec4 stroke_color\n#pragma mapbox: define mediump float stroke_width\n#pragma mapbox: define lowp float stroke_opacity\nvoid main() {\n#pragma mapbox: initialize highp vec4 color\n#pragma mapbox: initialize mediump float radius\n#pragma mapbox: initialize lowp float blur\n#pragma mapbox: initialize lowp float opacity\n#pragma mapbox: initialize highp vec4 stroke_color\n#pragma mapbox: initialize mediump float stroke_width\n#pragma mapbox: initialize lowp float stroke_opacity\nvec2 extrude=v_data.xy;float extrude_length=length(extrude);lowp float antialiasblur=v_data.z;float antialiased_blur=-max(blur,antialiasblur);float opacity_t=smoothstep(0.0,antialiased_blur,extrude_length-1.0);float color_t=stroke_width < 0.01 ? 0.0 : smoothstep(\nantialiased_blur,0.0,extrude_length-radius/(radius+stroke_width)\n);vec4 out_color=mix(color*opacity,stroke_color*stroke_opacity,color_t);\n#ifdef FOG\nout_color=fog_apply_premultiplied(out_color,v_fog_pos);\n#endif\ngl_FragColor=out_color*(v_visibility*opacity_t);\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}";
+var circleFrag = "varying vec3 v_data;\r\nvarying float v_visibility;\r\n#pragma mapbox: define highp vec4 color\r\n#pragma mapbox: define mediump float radius\r\n#pragma mapbox: define lowp float blur\r\n#pragma mapbox: define lowp float opacity\r\n#pragma mapbox: define highp vec4 stroke_color\r\n#pragma mapbox: define mediump float stroke_width\r\n#pragma mapbox: define lowp float stroke_opacity\r\nvoid main() {\r\n#pragma mapbox: initialize highp vec4 color\r\n#pragma mapbox: initialize mediump float radius\r\n#pragma mapbox: initialize lowp float blur\r\n#pragma mapbox: initialize lowp float opacity\r\n#pragma mapbox: initialize highp vec4 stroke_color\r\n#pragma mapbox: initialize mediump float stroke_width\r\n#pragma mapbox: initialize lowp float stroke_opacity\r\nvec2 extrude=v_data.xy;\r\nfloat extrude_length=length(extrude);\r\nlowp float antialiasblur=v_data.z;\r\nfloat antialiased_blur=-max(blur,antialiasblur);\r\nfloat opacity_t=smoothstep(0.0,antialiased_blur,extrude_length-1.0);\r\nfloat color_t=stroke_width < 0.01 ? 0.0 : smoothstep(\r\nantialiased_blur,0.0,extrude_length-radius/(radius+stroke_width)\r\n);\r\nvec4 out_color=mix(color*opacity,stroke_color*stroke_opacity,color_t);\r\n#ifdef FOG\r\nout_color=fog_apply_premultiplied(out_color,v_fog_pos);\r\n#endif\r\ngl_FragColor=out_color*(v_visibility*opacity_t);\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\n}";
 
-var circleVert = "#define NUM_VISIBILITY_RINGS 2\n#define INV_SQRT2 0.70710678\n#define ELEVATION_BIAS 0.0001\n#define NUM_SAMPLES_PER_RING 16\nuniform mat4 u_matrix;uniform mat2 u_extrude_scale;uniform lowp float u_device_pixel_ratio;uniform highp float u_camera_to_center_distance;attribute vec2 a_pos;\n#ifdef PROJECTION_GLOBE_VIEW\nattribute vec3 a_pos_3;attribute vec3 a_pos_normal_3;attribute float a_scale;uniform mat4 u_inv_rot_matrix;uniform vec2 u_merc_center;uniform vec3 u_tile_id;uniform float u_zoom_transition;uniform vec3 u_up_dir;\n#endif\nvarying vec3 v_data;varying float v_visibility;\n#pragma mapbox: define highp vec4 color\n#pragma mapbox: define mediump float radius\n#pragma mapbox: define lowp float blur\n#pragma mapbox: define lowp float opacity\n#pragma mapbox: define highp vec4 stroke_color\n#pragma mapbox: define mediump float stroke_width\n#pragma mapbox: define lowp float stroke_opacity\nvec2 calc_offset(vec2 extrusion,float radius,float stroke_width, float view_scale) {return extrusion*(radius+stroke_width)*u_extrude_scale*view_scale;}float cantilevered_elevation(vec2 pos,float radius,float stroke_width,float view_scale) {vec2 c1=pos+calc_offset(vec2(-1,-1),radius,stroke_width,view_scale);vec2 c2=pos+calc_offset(vec2(1,-1),radius,stroke_width,view_scale);vec2 c3=pos+calc_offset(vec2(1,1),radius,stroke_width,view_scale);vec2 c4=pos+calc_offset(vec2(-1,1),radius,stroke_width,view_scale);float h1=elevation(c1)+ELEVATION_BIAS;float h2=elevation(c2)+ELEVATION_BIAS;float h3=elevation(c3)+ELEVATION_BIAS;float h4=elevation(c4)+ELEVATION_BIAS;return max(h4,max(h3,max(h1,h2)));}float circle_elevation(vec2 pos) {\n#if defined(TERRAIN)\nreturn elevation(pos)+ELEVATION_BIAS;\n#else\nreturn 0.0;\n#endif\n}vec4 project_vertex(vec2 extrusion,vec4 world_center,vec4 projected_center,float radius,float stroke_width, float view_scale,mat3 surface_vectors) {vec2 sample_offset=calc_offset(extrusion,radius,stroke_width,view_scale);\n#ifdef PITCH_WITH_MAP\n#ifdef PROJECTION_GLOBE_VIEW\nreturn u_matrix*( world_center+vec4(sample_offset.x*surface_vectors[0]+sample_offset.y*surface_vectors[1],0) );\n#else\nreturn u_matrix*( world_center+vec4(sample_offset,0,0) );\n#endif\n#else\nreturn projected_center+vec4(sample_offset,0,0);\n#endif\n}float get_sample_step() {\n#ifdef PITCH_WITH_MAP\nreturn 2.0*PI/float(NUM_SAMPLES_PER_RING);\n#else\nreturn PI/float(NUM_SAMPLES_PER_RING);\n#endif\n}void main(void) {\n#pragma mapbox: initialize highp vec4 color\n#pragma mapbox: initialize mediump float radius\n#pragma mapbox: initialize lowp float blur\n#pragma mapbox: initialize lowp float opacity\n#pragma mapbox: initialize highp vec4 stroke_color\n#pragma mapbox: initialize mediump float stroke_width\n#pragma mapbox: initialize lowp float stroke_opacity\nvec2 extrude=vec2(mod(a_pos,2.0)*2.0-1.0);vec2 circle_center=floor(a_pos*0.5);\n#ifdef PROJECTION_GLOBE_VIEW\nvec3 pos_normal_3=a_pos_normal_3/16384.0;mat3 surface_vectors=globe_mercator_surface_vectors(pos_normal_3,u_up_dir,u_zoom_transition);vec3 surface_extrusion=extrude.x*surface_vectors[0]+extrude.y*surface_vectors[1];vec3 globe_elevation=elevationVector(circle_center)*circle_elevation(circle_center);vec3 globe_pos=a_pos_3+surface_extrusion+globe_elevation;vec3 mercator_elevation=u_up_dir*u_tile_up_scale*circle_elevation(circle_center);vec3 merc_pos=mercator_tile_position(u_inv_rot_matrix,circle_center,u_tile_id,u_merc_center)+surface_extrusion+mercator_elevation;vec3 pos=mix_globe_mercator(globe_pos,merc_pos,u_zoom_transition);vec4 world_center=vec4(pos,1);\n#else \nmat3 surface_vectors=mat3(1.0);float height=circle_elevation(circle_center);vec4 world_center=vec4(circle_center,height,1);\n#endif\nvec4 projected_center=u_matrix*world_center;float view_scale=0.0;\n#ifdef PITCH_WITH_MAP\n#ifdef SCALE_WITH_MAP\nview_scale=1.0;\n#else\nview_scale=projected_center.w/u_camera_to_center_distance;\n#endif\n#else\n#ifdef SCALE_WITH_MAP\nview_scale=u_camera_to_center_distance;\n#else\nview_scale=projected_center.w;\n#endif\n#endif\ngl_Position=project_vertex(extrude,world_center,projected_center,radius,stroke_width,view_scale,surface_vectors);float visibility=0.0;\n#ifdef TERRAIN\nfloat step=get_sample_step();\n#ifdef PITCH_WITH_MAP\nfloat cantilevered_height=cantilevered_elevation(circle_center,radius,stroke_width,view_scale);vec4 occlusion_world_center=vec4(circle_center,cantilevered_height,1);vec4 occlusion_projected_center=u_matrix*occlusion_world_center;\n#else\nvec4 occlusion_world_center=world_center;vec4 occlusion_projected_center=projected_center;\n#endif\nfor(int ring=0; ring < NUM_VISIBILITY_RINGS; ring++) {float scale=(float(ring)+1.0)/float(NUM_VISIBILITY_RINGS);for(int i=0; i < NUM_SAMPLES_PER_RING; i++) {vec2 extrusion=vec2(cos(step*float(i)),-sin(step*float(i)))*scale;vec4 frag_pos=project_vertex(extrusion,occlusion_world_center,occlusion_projected_center,radius,stroke_width,view_scale,surface_vectors);visibility+=float(!isOccluded(frag_pos));}}visibility/=float(NUM_VISIBILITY_RINGS)*float(NUM_SAMPLES_PER_RING);\n#else\nvisibility=1.0;\n#endif\n#ifdef PROJECTION_GLOBE_VIEW\nvisibility=1.0;\n#endif\nv_visibility=visibility;lowp float antialiasblur=1.0/u_device_pixel_ratio/(radius+stroke_width);v_data=vec3(extrude.x,extrude.y,antialiasblur);\n#ifdef FOG\nv_fog_pos=fog_position(world_center.xyz);\n#endif\n}";
+var circleVert = "#define NUM_VISIBILITY_RINGS 2\r\n#define INV_SQRT2 0.70710678\r\n#define ELEVATION_BIAS 0.0001\r\n#define NUM_SAMPLES_PER_RING 16\r\nuniform mat4 u_matrix;\r\nuniform mat2 u_extrude_scale;\r\nuniform lowp float u_device_pixel_ratio;\r\nuniform highp float u_camera_to_center_distance;\r\nattribute vec2 a_pos;\r\n#ifdef PROJECTION_GLOBE_VIEW\r\nattribute vec3 a_pos_3;attribute vec3 a_pos_normal_3;attribute float a_scale;uniform mat4 u_inv_rot_matrix;\r\nuniform vec2 u_merc_center;\r\nuniform vec3 u_tile_id;\r\nuniform float u_zoom_transition;\r\nuniform vec3 u_up_dir;\r\n#endif\r\nvarying vec3 v_data;\r\nvarying float v_visibility;\r\n#pragma mapbox: define highp vec4 color\r\n#pragma mapbox: define mediump float radius\r\n#pragma mapbox: define lowp float blur\r\n#pragma mapbox: define lowp float opacity\r\n#pragma mapbox: define highp vec4 stroke_color\r\n#pragma mapbox: define mediump float stroke_width\r\n#pragma mapbox: define lowp float stroke_opacity\r\nvec2 calc_offset(vec2 extrusion,float radius,float stroke_width, float view_scale) {\r\nreturn extrusion*(radius+stroke_width)*u_extrude_scale*view_scale;\r\n}\r\nfloat cantilevered_elevation(vec2 pos,float radius,float stroke_width,float view_scale) {\r\nvec2 c1=pos+calc_offset(vec2(-1,-1),radius,stroke_width,view_scale);\r\nvec2 c2=pos+calc_offset(vec2(1,-1),radius,stroke_width,view_scale);\r\nvec2 c3=pos+calc_offset(vec2(1,1),radius,stroke_width,view_scale);\r\nvec2 c4=pos+calc_offset(vec2(-1,1),radius,stroke_width,view_scale);\r\nfloat h1=elevation(c1)+ELEVATION_BIAS;\r\nfloat h2=elevation(c2)+ELEVATION_BIAS;\r\nfloat h3=elevation(c3)+ELEVATION_BIAS;\r\nfloat h4=elevation(c4)+ELEVATION_BIAS;\r\nreturn max(h4,max(h3,max(h1,h2)));\r\n}\r\nfloat circle_elevation(vec2 pos) {\r\n#if defined(TERRAIN)\r\nreturn elevation(pos)+ELEVATION_BIAS;\r\n#else\r\nreturn 0.0;\r\n#endif\r\n}\r\nvec4 project_vertex(vec2 extrusion,vec4 world_center,vec4 projected_center,float radius,float stroke_width, float view_scale,mat3 surface_vectors) {\r\nvec2 sample_offset=calc_offset(extrusion,radius,stroke_width,view_scale);\r\n#ifdef PITCH_WITH_MAP\r\n#ifdef PROJECTION_GLOBE_VIEW\r\nreturn u_matrix*( world_center+vec4(sample_offset.x*surface_vectors[0]+sample_offset.y*surface_vectors[1],0) );\r\n#else\r\nreturn u_matrix*( world_center+vec4(sample_offset,0,0) );\r\n#endif\r\n#else\r\nreturn projected_center+vec4(sample_offset,0,0);\r\n#endif\r\n}\r\nfloat get_sample_step() {\r\n#ifdef PITCH_WITH_MAP\r\nreturn 2.0*PI/float(NUM_SAMPLES_PER_RING);\r\n#else\nreturn PI/float(NUM_SAMPLES_PER_RING);\r\n#endif\r\n}\r\nvoid main(void) {\r\n#pragma mapbox: initialize highp vec4 color\r\n#pragma mapbox: initialize mediump float radius\r\n#pragma mapbox: initialize lowp float blur\r\n#pragma mapbox: initialize lowp float opacity\r\n#pragma mapbox: initialize highp vec4 stroke_color\r\n#pragma mapbox: initialize mediump float stroke_width\r\n#pragma mapbox: initialize lowp float stroke_opacity\nvec2 extrude=vec2(mod(a_pos,2.0)*2.0-1.0);vec2 circle_center=floor(a_pos*0.5);\r\n#ifdef PROJECTION_GLOBE_VIEW\nvec3 pos_normal_3=a_pos_normal_3/16384.0;\r\nmat3 surface_vectors=globe_mercator_surface_vectors(pos_normal_3,u_up_dir,u_zoom_transition);\r\nvec3 surface_extrusion=extrude.x*surface_vectors[0]+extrude.y*surface_vectors[1];\r\nvec3 globe_elevation=elevationVector(circle_center)*circle_elevation(circle_center);\r\nvec3 globe_pos=a_pos_3+surface_extrusion+globe_elevation;\r\nvec3 mercator_elevation=u_up_dir*u_tile_up_scale*circle_elevation(circle_center);\r\nvec3 merc_pos=mercator_tile_position(u_inv_rot_matrix,circle_center,u_tile_id,u_merc_center)+surface_extrusion+mercator_elevation;\r\nvec3 pos=mix_globe_mercator(globe_pos,merc_pos,u_zoom_transition);\r\nvec4 world_center=vec4(pos,1);\r\n#else \r\nmat3 surface_vectors=mat3(1.0);float height=circle_elevation(circle_center);\r\nvec4 world_center=vec4(circle_center,height,1);\r\n#endif\r\nvec4 projected_center=u_matrix*world_center;\r\nfloat view_scale=0.0;\r\n#ifdef PITCH_WITH_MAP\r\n#ifdef SCALE_WITH_MAP\r\nview_scale=1.0;\r\n#else\nview_scale=projected_center.w/u_camera_to_center_distance;\r\n#endif\r\n#else\r\n#ifdef SCALE_WITH_MAP\r\nview_scale=u_camera_to_center_distance;\r\n#else\r\nview_scale=projected_center.w;\r\n#endif\r\n#endif\r\ngl_Position=project_vertex(extrude,world_center,projected_center,radius,stroke_width,view_scale,surface_vectors);\r\nfloat visibility=0.0;\r\n#ifdef TERRAIN\r\nfloat step=get_sample_step();\r\n#ifdef PITCH_WITH_MAP\nfloat cantilevered_height=cantilevered_elevation(circle_center,radius,stroke_width,view_scale);\r\nvec4 occlusion_world_center=vec4(circle_center,cantilevered_height,1);\r\nvec4 occlusion_projected_center=u_matrix*occlusion_world_center;\r\n#else\r\nvec4 occlusion_world_center=world_center;\r\nvec4 occlusion_projected_center=projected_center;\r\n#endif\r\nfor(int ring=0; ring < NUM_VISIBILITY_RINGS; ring++) {\r\nfloat scale=(float(ring)+1.0)/float(NUM_VISIBILITY_RINGS);\r\nfor(int i=0; i < NUM_SAMPLES_PER_RING; i++) {\r\nvec2 extrusion=vec2(cos(step*float(i)),-sin(step*float(i)))*scale;\r\nvec4 frag_pos=project_vertex(extrusion,occlusion_world_center,occlusion_projected_center,radius,stroke_width,view_scale,surface_vectors);\r\nvisibility+=float(!isOccluded(frag_pos));\r\n}\r\n}\r\nvisibility/=float(NUM_VISIBILITY_RINGS)*float(NUM_SAMPLES_PER_RING);\r\n#else\r\nvisibility=1.0;\r\n#endif\n#ifdef PROJECTION_GLOBE_VIEW\r\nvisibility=1.0;\r\n#endif\r\nv_visibility=visibility;lowp float antialiasblur=1.0/u_device_pixel_ratio/(radius+stroke_width);\r\nv_data=vec3(extrude.x,extrude.y,antialiasblur);\r\n#ifdef FOG\r\nv_fog_pos=fog_position(world_center.xyz);\r\n#endif\r\n}";
 
-var clippingMaskFrag = "void main() {gl_FragColor=vec4(1.0);}";
+var clippingMaskFrag = "void main() {\r\ngl_FragColor=vec4(1.0);\r\n}";
 
-var clippingMaskVert = "attribute vec2 a_pos;uniform mat4 u_matrix;void main() {gl_Position=u_matrix*vec4(a_pos,0,1);}";
+var clippingMaskVert = "attribute vec2 a_pos;\r\nuniform mat4 u_matrix;\r\nvoid main() {\r\ngl_Position=u_matrix*vec4(a_pos,0,1);\r\n}";
 
-var heatmapFrag = "uniform highp float u_intensity;varying vec2 v_extrude;\n#pragma mapbox: define highp float weight\n#define GAUSS_COEF 0.3989422804014327\nvoid main() {\n#pragma mapbox: initialize highp float weight\nfloat d=-0.5*3.0*3.0*dot(v_extrude,v_extrude);float val=weight*u_intensity*GAUSS_COEF*exp(d);gl_FragColor=vec4(val,1.0,1.0,1.0);\n#ifdef FOG\nif (u_is_globe==0) {gl_FragColor.r*=pow(1.0-fog_opacity(v_fog_pos),2.0);}\n#endif\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}";
+var heatmapFrag = "uniform highp float u_intensity;\r\nvarying vec2 v_extrude;\r\n#pragma mapbox: define highp float weight\n#define GAUSS_COEF 0.3989422804014327\r\nvoid main() {\r\n#pragma mapbox: initialize highp float weight\nfloat d=-0.5*3.0*3.0*dot(v_extrude,v_extrude);\r\nfloat val=weight*u_intensity*GAUSS_COEF*exp(d);\r\ngl_FragColor=vec4(val,1.0,1.0,1.0);\r\n#ifdef FOG\nif (u_is_globe==0) {gl_FragColor.r*=pow(1.0-fog_opacity(v_fog_pos),2.0);\r\n}\r\n#endif\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\n}";
 
-var heatmapVert = "uniform mat4 u_matrix;uniform float u_extrude_scale;uniform float u_opacity;uniform float u_intensity;attribute vec2 a_pos;\n#ifdef PROJECTION_GLOBE_VIEW\nattribute vec3 a_pos_3;attribute vec3 a_pos_normal_3;uniform mat4 u_inv_rot_matrix;uniform vec2 u_merc_center;uniform vec3 u_tile_id;uniform float u_zoom_transition;uniform vec3 u_up_dir;\n#endif\nvarying vec2 v_extrude;\n#pragma mapbox: define highp float weight\n#pragma mapbox: define mediump float radius\nconst highp float ZERO=1.0/255.0/16.0;\n#define GAUSS_COEF 0.3989422804014327\nvoid main(void) {\n#pragma mapbox: initialize highp float weight\n#pragma mapbox: initialize mediump float radius\nvec2 unscaled_extrude=vec2(mod(a_pos,2.0)*2.0-1.0);float S=sqrt(-2.0*log(ZERO/weight/u_intensity/GAUSS_COEF))/3.0;v_extrude=S*unscaled_extrude;vec2 extrude=v_extrude*radius*u_extrude_scale;vec2 tilePos=floor(a_pos*0.5);\n#ifdef PROJECTION_GLOBE_VIEW\nvec3 pos_normal_3=a_pos_normal_3/16384.0;mat3 surface_vectors=globe_mercator_surface_vectors(pos_normal_3,u_up_dir,u_zoom_transition);vec3 surface_extrusion=extrude.x*surface_vectors[0]+extrude.y*surface_vectors[1];vec3 globe_elevation=elevationVector(tilePos)*elevation(tilePos);vec3 globe_pos=a_pos_3+surface_extrusion+globe_elevation;vec3 mercator_elevation=u_up_dir*u_tile_up_scale*elevation(tilePos);vec3 merc_pos=mercator_tile_position(u_inv_rot_matrix,tilePos,u_tile_id,u_merc_center)+surface_extrusion+mercator_elevation;vec3 pos=mix_globe_mercator(globe_pos,merc_pos,u_zoom_transition);\n#else\nvec3 pos=vec3(tilePos+extrude,elevation(tilePos));\n#endif\ngl_Position=u_matrix*vec4(pos,1);\n#ifdef FOG\nv_fog_pos=fog_position(pos);\n#endif\n}";
+var heatmapVert = "uniform mat4 u_matrix;\r\nuniform float u_extrude_scale;\r\nuniform float u_opacity;\r\nuniform float u_intensity;\r\nattribute vec2 a_pos;\r\n#ifdef PROJECTION_GLOBE_VIEW\r\nattribute vec3 a_pos_3;attribute vec3 a_pos_normal_3;uniform mat4 u_inv_rot_matrix;\r\nuniform vec2 u_merc_center;\r\nuniform vec3 u_tile_id;\r\nuniform float u_zoom_transition;\r\nuniform vec3 u_up_dir;\r\n#endif\r\nvarying vec2 v_extrude;\r\n#pragma mapbox: define highp float weight\r\n#pragma mapbox: define mediump float radius\nconst highp float ZERO=1.0/255.0/16.0;\n#define GAUSS_COEF 0.3989422804014327\r\nvoid main(void) {\r\n#pragma mapbox: initialize highp float weight\r\n#pragma mapbox: initialize mediump float radius\nvec2 unscaled_extrude=vec2(mod(a_pos,2.0)*2.0-1.0);float S=sqrt(-2.0*log(ZERO/weight/u_intensity/GAUSS_COEF))/3.0;v_extrude=S*unscaled_extrude;vec2 extrude=v_extrude*radius*u_extrude_scale;vec2 tilePos=floor(a_pos*0.5);\r\n#ifdef PROJECTION_GLOBE_VIEW\nvec3 pos_normal_3=a_pos_normal_3/16384.0;\r\nmat3 surface_vectors=globe_mercator_surface_vectors(pos_normal_3,u_up_dir,u_zoom_transition);\r\nvec3 surface_extrusion=extrude.x*surface_vectors[0]+extrude.y*surface_vectors[1];\r\nvec3 globe_elevation=elevationVector(tilePos)*elevation(tilePos);\r\nvec3 globe_pos=a_pos_3+surface_extrusion+globe_elevation;\r\nvec3 mercator_elevation=u_up_dir*u_tile_up_scale*elevation(tilePos);\r\nvec3 merc_pos=mercator_tile_position(u_inv_rot_matrix,tilePos,u_tile_id,u_merc_center)+surface_extrusion+mercator_elevation;\r\nvec3 pos=mix_globe_mercator(globe_pos,merc_pos,u_zoom_transition);\r\n#else\r\nvec3 pos=vec3(tilePos+extrude,elevation(tilePos));\r\n#endif\r\ngl_Position=u_matrix*vec4(pos,1);\r\n#ifdef FOG\r\nv_fog_pos=fog_position(pos);\r\n#endif\r\n}";
 
-var heatmapTextureFrag = "uniform sampler2D u_image;uniform sampler2D u_color_ramp;uniform float u_opacity;varying vec2 v_pos;void main() {float t=texture2D(u_image,v_pos).r;vec4 color=texture2D(u_color_ramp,vec2(t,0.5));gl_FragColor=color*u_opacity;\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(0.0);\n#endif\n}";
+var heatmapTextureFrag = "uniform sampler2D u_image;\r\nuniform sampler2D u_color_ramp;\r\nuniform float u_opacity;\r\nvarying vec2 v_pos;\r\nvoid main() {\r\nfloat t=texture2D(u_image,v_pos).r;\r\nvec4 color=texture2D(u_color_ramp,vec2(t,0.5));\r\ngl_FragColor=color*u_opacity;\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(0.0);\r\n#endif\r\n}";
 
-var heatmapTextureVert = "attribute vec2 a_pos;varying vec2 v_pos;void main() {gl_Position=vec4(a_pos,0,1);v_pos=a_pos*0.5+0.5;}";
+var heatmapTextureVert = "attribute vec2 a_pos;\r\nvarying vec2 v_pos;\r\nvoid main() {\r\ngl_Position=vec4(a_pos,0,1);\r\nv_pos=a_pos*0.5+0.5;\r\n}";
 
-var collisionBoxFrag = "varying float v_placed;varying float v_notUsed;void main() {vec4 red =vec4(1.0,0.0,0.0,1.0);vec4 blue=vec4(0.0,0.0,1.0,0.5);gl_FragColor =mix(red,blue,step(0.5,v_placed))*0.5;gl_FragColor*=mix(1.0,0.1,step(0.5,v_notUsed));}";
+var collisionBoxFrag = "varying float v_placed;\r\nvarying float v_notUsed;\r\nvoid main() {\r\nvec4 red =vec4(1.0,0.0,0.0,1.0);vec4 blue=vec4(0.0,0.0,1.0,0.5);gl_FragColor =mix(red,blue,step(0.5,v_placed))*0.5;\r\ngl_FragColor*=mix(1.0,0.1,step(0.5,v_notUsed));\r\n}";
 
-var collisionBoxVert = "attribute vec3 a_pos;attribute vec2 a_anchor_pos;attribute vec2 a_extrude;attribute vec2 a_placed;attribute vec2 a_shift;attribute float a_size_scale;attribute vec2 a_padding;uniform mat4 u_matrix;uniform vec2 u_extrude_scale;uniform float u_camera_to_center_distance;varying float v_placed;varying float v_notUsed;void main() {vec4 projectedPoint=u_matrix*vec4(a_pos+elevationVector(a_anchor_pos)*elevation(a_anchor_pos),1);highp float camera_to_anchor_distance=projectedPoint.w;highp float collision_perspective_ratio=clamp(\n0.5+0.5*(u_camera_to_center_distance/camera_to_anchor_distance),0.0,1.5);gl_Position=projectedPoint;gl_Position.xy+=(a_extrude*a_size_scale+a_shift+a_padding)*u_extrude_scale*gl_Position.w*collision_perspective_ratio;v_placed=a_placed.x;v_notUsed=a_placed.y;}";
+var collisionBoxVert = "attribute vec3 a_pos;\r\nattribute vec2 a_anchor_pos;\r\nattribute vec2 a_extrude;\r\nattribute vec2 a_placed;\r\nattribute vec2 a_shift;\r\nattribute float a_size_scale;\r\nattribute vec2 a_padding;\r\nuniform mat4 u_matrix;\r\nuniform vec2 u_extrude_scale;\r\nuniform float u_camera_to_center_distance;\r\nvarying float v_placed;\r\nvarying float v_notUsed;\r\nvoid main() {\r\nvec4 projectedPoint=u_matrix*vec4(a_pos+elevationVector(a_anchor_pos)*elevation(a_anchor_pos),1);\r\nhighp float camera_to_anchor_distance=projectedPoint.w;\r\nhighp float collision_perspective_ratio=clamp(\r\n0.5+0.5*(u_camera_to_center_distance/camera_to_anchor_distance),0.0,1.5);\r\ngl_Position=projectedPoint;\r\ngl_Position.xy+=(a_extrude*a_size_scale+a_shift+a_padding)*u_extrude_scale*gl_Position.w*collision_perspective_ratio;\r\nv_placed=a_placed.x;\r\nv_notUsed=a_placed.y;\r\n}";
 
-var collisionCircleFrag = "varying float v_radius;varying vec2 v_extrude;varying float v_perspective_ratio;varying float v_collision;void main() {float alpha=0.5*min(v_perspective_ratio,1.0);float stroke_radius=0.9*max(v_perspective_ratio,1.0);float distance_to_center=length(v_extrude);float distance_to_edge=abs(distance_to_center-v_radius);float opacity_t=smoothstep(-stroke_radius,0.0,-distance_to_edge);vec4 color=mix(vec4(0.0,0.0,1.0,0.5),vec4(1.0,0.0,0.0,1.0),v_collision);gl_FragColor=color*alpha*opacity_t;}";
+var collisionCircleFrag = "varying float v_radius;\r\nvarying vec2 v_extrude;\r\nvarying float v_perspective_ratio;\r\nvarying float v_collision;\r\nvoid main() {\r\nfloat alpha=0.5*min(v_perspective_ratio,1.0);\r\nfloat stroke_radius=0.9*max(v_perspective_ratio,1.0);\r\nfloat distance_to_center=length(v_extrude);\r\nfloat distance_to_edge=abs(distance_to_center-v_radius);\r\nfloat opacity_t=smoothstep(-stroke_radius,0.0,-distance_to_edge);\r\nvec4 color=mix(vec4(0.0,0.0,1.0,0.5),vec4(1.0,0.0,0.0,1.0),v_collision);\r\ngl_FragColor=color*alpha*opacity_t;\r\n}";
 
-var collisionCircleVert = "attribute vec2 a_pos_2f;attribute float a_radius;attribute vec2 a_flags;uniform mat4 u_matrix;uniform mat4 u_inv_matrix;uniform vec2 u_viewport_size;uniform float u_camera_to_center_distance;varying float v_radius;varying vec2 v_extrude;varying float v_perspective_ratio;varying float v_collision;vec3 toTilePosition(vec2 screenPos) {vec4 rayStart=u_inv_matrix*vec4(screenPos,-1.0,1.0);vec4 rayEnd  =u_inv_matrix*vec4(screenPos, 1.0,1.0);rayStart.xyz/=rayStart.w;rayEnd.xyz  /=rayEnd.w;highp float t=(0.0-rayStart.z)/(rayEnd.z-rayStart.z);return mix(rayStart.xyz,rayEnd.xyz,t);}void main() {vec2 quadCenterPos=a_pos_2f;float radius=a_radius;float collision=a_flags.x;float vertexIdx=a_flags.y;vec2 quadVertexOffset=vec2(\nmix(-1.0,1.0,float(vertexIdx >=2.0)),mix(-1.0,1.0,float(vertexIdx >=1.0 && vertexIdx <=2.0)));vec2 quadVertexExtent=quadVertexOffset*radius;vec3 tilePos=toTilePosition(quadCenterPos);vec4 clipPos=u_matrix*vec4(tilePos,1.0);highp float camera_to_anchor_distance=clipPos.w;highp float collision_perspective_ratio=clamp(\n0.5+0.5*(u_camera_to_center_distance/camera_to_anchor_distance),0.0,4.0);float padding_factor=1.2;v_radius=radius;v_extrude=quadVertexExtent*padding_factor;v_perspective_ratio=collision_perspective_ratio;v_collision=collision;gl_Position=vec4(clipPos.xyz/clipPos.w,1.0)+vec4(quadVertexExtent*padding_factor/u_viewport_size*2.0,0.0,0.0);}";
+var collisionCircleVert = "attribute vec2 a_pos_2f;\r\nattribute float a_radius;\r\nattribute vec2 a_flags;\r\nuniform mat4 u_matrix;\r\nuniform mat4 u_inv_matrix;\r\nuniform vec2 u_viewport_size;\r\nuniform float u_camera_to_center_distance;\r\nvarying float v_radius;\r\nvarying vec2 v_extrude;\r\nvarying float v_perspective_ratio;\r\nvarying float v_collision;\r\nvec3 toTilePosition(vec2 screenPos) {vec4 rayStart=u_inv_matrix*vec4(screenPos,-1.0,1.0);\r\nvec4 rayEnd  =u_inv_matrix*vec4(screenPos, 1.0,1.0);\r\nrayStart.xyz/=rayStart.w;\r\nrayEnd.xyz  /=rayEnd.w;\r\nhighp float t=(0.0-rayStart.z)/(rayEnd.z-rayStart.z);\r\nreturn mix(rayStart.xyz,rayEnd.xyz,t);\r\n}\r\nvoid main() {\r\nvec2 quadCenterPos=a_pos_2f;\r\nfloat radius=a_radius;\r\nfloat collision=a_flags.x;\r\nfloat vertexIdx=a_flags.y;\r\nvec2 quadVertexOffset=vec2(\r\nmix(-1.0,1.0,float(vertexIdx >=2.0)),mix(-1.0,1.0,float(vertexIdx >=1.0 && vertexIdx <=2.0)));\r\nvec2 quadVertexExtent=quadVertexOffset*radius;vec3 tilePos=toTilePosition(quadCenterPos);\r\nvec4 clipPos=u_matrix*vec4(tilePos,1.0);\r\nhighp float camera_to_anchor_distance=clipPos.w;\r\nhighp float collision_perspective_ratio=clamp(\r\n0.5+0.5*(u_camera_to_center_distance/camera_to_anchor_distance),0.0,4.0);float padding_factor=1.2;\r\nv_radius=radius;\r\nv_extrude=quadVertexExtent*padding_factor;\r\nv_perspective_ratio=collision_perspective_ratio;\r\nv_collision=collision;\r\ngl_Position=vec4(clipPos.xyz/clipPos.w,1.0)+vec4(quadVertexExtent*padding_factor/u_viewport_size*2.0,0.0,0.0);\r\n}";
 
-var debugFrag = "uniform highp vec4 u_color;uniform sampler2D u_overlay;varying vec2 v_uv;void main() {vec4 overlay_color=texture2D(u_overlay,v_uv);gl_FragColor=mix(u_color,overlay_color,overlay_color.a);}";
+var debugFrag = "uniform highp vec4 u_color;\r\nuniform sampler2D u_overlay;\r\nvarying vec2 v_uv;\r\nvoid main() {\r\nvec4 overlay_color=texture2D(u_overlay,v_uv);\r\ngl_FragColor=mix(u_color,overlay_color,overlay_color.a);\r\n}";
 
-var debugVert = "attribute vec2 a_pos;\n#ifdef PROJECTION_GLOBE_VIEW\nattribute vec3 a_pos_3;\n#endif\nvarying vec2 v_uv;uniform mat4 u_matrix;uniform float u_overlay_scale;void main() {float h=elevation(a_pos);v_uv=a_pos/8192.0;\n#ifdef PROJECTION_GLOBE_VIEW\ngl_Position=u_matrix*vec4(a_pos_3+elevationVector(a_pos)*h,1);\n#else\ngl_Position=u_matrix*vec4(a_pos*u_overlay_scale,h,1);\n#endif\n}";
+var debugVert = "attribute vec2 a_pos;\r\n#ifdef PROJECTION_GLOBE_VIEW\r\nattribute vec3 a_pos_3;\r\n#endif\r\nvarying vec2 v_uv;\r\nuniform mat4 u_matrix;\r\nuniform float u_overlay_scale;\r\nvoid main() {float h=elevation(a_pos);\r\nv_uv=a_pos/8192.0;\r\n#ifdef PROJECTION_GLOBE_VIEW\r\ngl_Position=u_matrix*vec4(a_pos_3+elevationVector(a_pos)*h,1);\r\n#else\r\ngl_Position=u_matrix*vec4(a_pos*u_overlay_scale,h,1);\r\n#endif\r\n}";
 
-var fillFrag = "#pragma mapbox: define highp vec4 color\n#pragma mapbox: define lowp float opacity\nvoid main() {\n#pragma mapbox: initialize highp vec4 color\n#pragma mapbox: initialize lowp float opacity\nvec4 out_color=color;\n#ifdef FOG\nout_color=fog_dither(fog_apply_premultiplied(out_color,v_fog_pos));\n#endif\ngl_FragColor=out_color*opacity;\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}";
+var fillFrag = "#pragma mapbox: define highp vec4 color\r\n#pragma mapbox: define lowp float opacity\r\nvoid main() {\r\n#pragma mapbox: initialize highp vec4 color\r\n#pragma mapbox: initialize lowp float opacity\r\nvec4 out_color=color;\r\n#ifdef FOG\r\nout_color=fog_dither(fog_apply_premultiplied(out_color,v_fog_pos));\r\n#endif\r\ngl_FragColor=out_color*opacity;\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\n}";
 
-var fillVert = "attribute vec2 a_pos;uniform mat4 u_matrix;\n#pragma mapbox: define highp vec4 color\n#pragma mapbox: define lowp float opacity\nvoid main() {\n#pragma mapbox: initialize highp vec4 color\n#pragma mapbox: initialize lowp float opacity\ngl_Position=u_matrix*vec4(a_pos,0,1);\n#ifdef FOG\nv_fog_pos=fog_position(a_pos);\n#endif\n}";
+var fillVert = "attribute vec2 a_pos;\r\nuniform mat4 u_matrix;\r\n#pragma mapbox: define highp vec4 color\r\n#pragma mapbox: define lowp float opacity\r\nvoid main() {\r\n#pragma mapbox: initialize highp vec4 color\r\n#pragma mapbox: initialize lowp float opacity\r\ngl_Position=u_matrix*vec4(a_pos,0,1);\r\n#ifdef FOG\r\nv_fog_pos=fog_position(a_pos);\r\n#endif\r\n}";
 
-var fillOutlineFrag = "varying vec2 v_pos;\n#pragma mapbox: define highp vec4 outline_color\n#pragma mapbox: define lowp float opacity\nvoid main() {\n#pragma mapbox: initialize highp vec4 outline_color\n#pragma mapbox: initialize lowp float opacity\nfloat dist=length(v_pos-gl_FragCoord.xy);float alpha=1.0-smoothstep(0.0,1.0,dist);vec4 out_color=outline_color;\n#ifdef FOG\nout_color=fog_dither(fog_apply_premultiplied(out_color,v_fog_pos));\n#endif\ngl_FragColor=out_color*(alpha*opacity);\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}";
+var fillOutlineFrag = "varying vec2 v_pos;\r\n#pragma mapbox: define highp vec4 outline_color\r\n#pragma mapbox: define lowp float opacity\r\nvoid main() {\r\n#pragma mapbox: initialize highp vec4 outline_color\r\n#pragma mapbox: initialize lowp float opacity\r\nfloat dist=length(v_pos-gl_FragCoord.xy);\r\nfloat alpha=1.0-smoothstep(0.0,1.0,dist);\r\nvec4 out_color=outline_color;\r\n#ifdef FOG\r\nout_color=fog_dither(fog_apply_premultiplied(out_color,v_fog_pos));\r\n#endif\r\ngl_FragColor=out_color*(alpha*opacity);\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\n}";
 
-var fillOutlineVert = "attribute vec2 a_pos;uniform mat4 u_matrix;uniform vec2 u_world;varying vec2 v_pos;\n#pragma mapbox: define highp vec4 outline_color\n#pragma mapbox: define lowp float opacity\nvoid main() {\n#pragma mapbox: initialize highp vec4 outline_color\n#pragma mapbox: initialize lowp float opacity\ngl_Position=u_matrix*vec4(a_pos,0,1);v_pos=(gl_Position.xy/gl_Position.w+1.0)/2.0*u_world;\n#ifdef FOG\nv_fog_pos=fog_position(a_pos);\n#endif\n}";
+var fillOutlineVert = "attribute vec2 a_pos;\r\nuniform mat4 u_matrix;\r\nuniform vec2 u_world;\r\nvarying vec2 v_pos;\r\n#pragma mapbox: define highp vec4 outline_color\r\n#pragma mapbox: define lowp float opacity\r\nvoid main() {\r\n#pragma mapbox: initialize highp vec4 outline_color\r\n#pragma mapbox: initialize lowp float opacity\r\ngl_Position=u_matrix*vec4(a_pos,0,1);\r\nv_pos=(gl_Position.xy/gl_Position.w+1.0)/2.0*u_world;\r\n#ifdef FOG\r\nv_fog_pos=fog_position(a_pos);\r\n#endif\r\n}";
 
-var fillOutlinePatternFrag = "uniform vec2 u_texsize;uniform sampler2D u_image;uniform float u_fade;varying vec2 v_pos_a;varying vec2 v_pos_b;varying vec2 v_pos;\n#pragma mapbox: define lowp float opacity\n#pragma mapbox: define lowp vec4 pattern_from\n#pragma mapbox: define lowp vec4 pattern_to\nvoid main() {\n#pragma mapbox: initialize lowp float opacity\n#pragma mapbox: initialize mediump vec4 pattern_from\n#pragma mapbox: initialize mediump vec4 pattern_to\nvec2 pattern_tl_a=pattern_from.xy;vec2 pattern_br_a=pattern_from.zw;vec2 pattern_tl_b=pattern_to.xy;vec2 pattern_br_b=pattern_to.zw;vec2 imagecoord=mod(v_pos_a,1.0);vec2 pos=mix(pattern_tl_a/u_texsize,pattern_br_a/u_texsize,imagecoord);vec4 color1=texture2D(u_image,pos);vec2 imagecoord_b=mod(v_pos_b,1.0);vec2 pos2=mix(pattern_tl_b/u_texsize,pattern_br_b/u_texsize,imagecoord_b);vec4 color2=texture2D(u_image,pos2);float dist=length(v_pos-gl_FragCoord.xy);float alpha=1.0-smoothstep(0.0,1.0,dist);vec4 out_color=mix(color1,color2,u_fade);\n#ifdef FOG\nout_color=fog_dither(fog_apply_premultiplied(out_color,v_fog_pos));\n#endif\ngl_FragColor=out_color*(alpha*opacity);\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}";
+var fillOutlinePatternFrag = "uniform vec2 u_texsize;\r\nuniform sampler2D u_image;\r\nuniform float u_fade;\r\nvarying vec2 v_pos_a;\r\nvarying vec2 v_pos_b;\r\nvarying vec2 v_pos;\r\n#pragma mapbox: define lowp float opacity\r\n#pragma mapbox: define lowp vec4 pattern_from\r\n#pragma mapbox: define lowp vec4 pattern_to\r\nvoid main() {\r\n#pragma mapbox: initialize lowp float opacity\r\n#pragma mapbox: initialize mediump vec4 pattern_from\r\n#pragma mapbox: initialize mediump vec4 pattern_to\r\nvec2 pattern_tl_a=pattern_from.xy;\r\nvec2 pattern_br_a=pattern_from.zw;\r\nvec2 pattern_tl_b=pattern_to.xy;\r\nvec2 pattern_br_b=pattern_to.zw;\r\nvec2 imagecoord=mod(v_pos_a,1.0);\r\nvec2 pos=mix(pattern_tl_a/u_texsize,pattern_br_a/u_texsize,imagecoord);\r\nvec4 color1=texture2D(u_image,pos);\r\nvec2 imagecoord_b=mod(v_pos_b,1.0);\r\nvec2 pos2=mix(pattern_tl_b/u_texsize,pattern_br_b/u_texsize,imagecoord_b);\r\nvec4 color2=texture2D(u_image,pos2);float dist=length(v_pos-gl_FragCoord.xy);\r\nfloat alpha=1.0-smoothstep(0.0,1.0,dist);\r\nvec4 out_color=mix(color1,color2,u_fade);\r\n#ifdef FOG\r\nout_color=fog_dither(fog_apply_premultiplied(out_color,v_fog_pos));\r\n#endif\r\ngl_FragColor=out_color*(alpha*opacity);\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\n}";
 
-var fillOutlinePatternVert = "uniform mat4 u_matrix;uniform vec2 u_world;uniform vec2 u_pixel_coord_upper;uniform vec2 u_pixel_coord_lower;uniform vec3 u_scale;attribute vec2 a_pos;varying vec2 v_pos_a;varying vec2 v_pos_b;varying vec2 v_pos;\n#pragma mapbox: define lowp float opacity\n#pragma mapbox: define lowp vec4 pattern_from\n#pragma mapbox: define lowp vec4 pattern_to\n#pragma mapbox: define lowp float pixel_ratio_from\n#pragma mapbox: define lowp float pixel_ratio_to\nvoid main() {\n#pragma mapbox: initialize lowp float opacity\n#pragma mapbox: initialize mediump vec4 pattern_from\n#pragma mapbox: initialize mediump vec4 pattern_to\n#pragma mapbox: initialize lowp float pixel_ratio_from\n#pragma mapbox: initialize lowp float pixel_ratio_to\nvec2 pattern_tl_a=pattern_from.xy;vec2 pattern_br_a=pattern_from.zw;vec2 pattern_tl_b=pattern_to.xy;vec2 pattern_br_b=pattern_to.zw;float tileRatio=u_scale.x;float fromScale=u_scale.y;float toScale=u_scale.z;gl_Position=u_matrix*vec4(a_pos,0,1);vec2 display_size_a=(pattern_br_a-pattern_tl_a)/pixel_ratio_from;vec2 display_size_b=(pattern_br_b-pattern_tl_b)/pixel_ratio_to;v_pos_a=get_pattern_pos(u_pixel_coord_upper,u_pixel_coord_lower,fromScale*display_size_a,tileRatio,a_pos);v_pos_b=get_pattern_pos(u_pixel_coord_upper,u_pixel_coord_lower,toScale*display_size_b,tileRatio,a_pos);v_pos=(gl_Position.xy/gl_Position.w+1.0)/2.0*u_world;\n#ifdef FOG\nv_fog_pos=fog_position(a_pos);\n#endif\n}";
+var fillOutlinePatternVert = "uniform mat4 u_matrix;\r\nuniform vec2 u_world;\r\nuniform vec2 u_pixel_coord_upper;\r\nuniform vec2 u_pixel_coord_lower;\r\nuniform vec3 u_scale;\r\nattribute vec2 a_pos;\r\nvarying vec2 v_pos_a;\r\nvarying vec2 v_pos_b;\r\nvarying vec2 v_pos;\r\n#pragma mapbox: define lowp float opacity\r\n#pragma mapbox: define lowp vec4 pattern_from\r\n#pragma mapbox: define lowp vec4 pattern_to\r\n#pragma mapbox: define lowp float pixel_ratio_from\r\n#pragma mapbox: define lowp float pixel_ratio_to\r\nvoid main() {\r\n#pragma mapbox: initialize lowp float opacity\r\n#pragma mapbox: initialize mediump vec4 pattern_from\r\n#pragma mapbox: initialize mediump vec4 pattern_to\r\n#pragma mapbox: initialize lowp float pixel_ratio_from\r\n#pragma mapbox: initialize lowp float pixel_ratio_to\r\nvec2 pattern_tl_a=pattern_from.xy;\r\nvec2 pattern_br_a=pattern_from.zw;\r\nvec2 pattern_tl_b=pattern_to.xy;\r\nvec2 pattern_br_b=pattern_to.zw;\r\nfloat tileRatio=u_scale.x;\r\nfloat fromScale=u_scale.y;\r\nfloat toScale=u_scale.z;\r\ngl_Position=u_matrix*vec4(a_pos,0,1);\r\nvec2 display_size_a=(pattern_br_a-pattern_tl_a)/pixel_ratio_from;\r\nvec2 display_size_b=(pattern_br_b-pattern_tl_b)/pixel_ratio_to;\r\nv_pos_a=get_pattern_pos(u_pixel_coord_upper,u_pixel_coord_lower,fromScale*display_size_a,tileRatio,a_pos);\r\nv_pos_b=get_pattern_pos(u_pixel_coord_upper,u_pixel_coord_lower,toScale*display_size_b,tileRatio,a_pos);\r\nv_pos=(gl_Position.xy/gl_Position.w+1.0)/2.0*u_world;\r\n#ifdef FOG\r\nv_fog_pos=fog_position(a_pos);\r\n#endif\r\n}";
 
-var fillPatternFrag = "uniform vec2 u_texsize;uniform float u_fade;uniform sampler2D u_image;varying vec2 v_pos_a;varying vec2 v_pos_b;\n#pragma mapbox: define lowp float opacity\n#pragma mapbox: define lowp vec4 pattern_from\n#pragma mapbox: define lowp vec4 pattern_to\nvoid main() {\n#pragma mapbox: initialize lowp float opacity\n#pragma mapbox: initialize mediump vec4 pattern_from\n#pragma mapbox: initialize mediump vec4 pattern_to\nvec2 pattern_tl_a=pattern_from.xy;vec2 pattern_br_a=pattern_from.zw;vec2 pattern_tl_b=pattern_to.xy;vec2 pattern_br_b=pattern_to.zw;vec2 imagecoord=mod(v_pos_a,1.0);vec2 pos=mix(pattern_tl_a/u_texsize,pattern_br_a/u_texsize,imagecoord);vec4 color1=texture2D(u_image,pos);vec2 imagecoord_b=mod(v_pos_b,1.0);vec2 pos2=mix(pattern_tl_b/u_texsize,pattern_br_b/u_texsize,imagecoord_b);vec4 color2=texture2D(u_image,pos2);vec4 out_color=mix(color1,color2,u_fade);\n#ifdef FOG\nout_color=fog_dither(fog_apply_premultiplied(out_color,v_fog_pos));\n#endif\ngl_FragColor=out_color*opacity;\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}";
+var fillPatternFrag = "uniform vec2 u_texsize;\r\nuniform float u_fade;\r\nuniform sampler2D u_image;\r\nvarying vec2 v_pos_a;\r\nvarying vec2 v_pos_b;\r\n#pragma mapbox: define lowp float opacity\r\n#pragma mapbox: define lowp vec4 pattern_from\r\n#pragma mapbox: define lowp vec4 pattern_to\r\nvoid main() {\r\n#pragma mapbox: initialize lowp float opacity\r\n#pragma mapbox: initialize mediump vec4 pattern_from\r\n#pragma mapbox: initialize mediump vec4 pattern_to\r\nvec2 pattern_tl_a=pattern_from.xy;\r\nvec2 pattern_br_a=pattern_from.zw;\r\nvec2 pattern_tl_b=pattern_to.xy;\r\nvec2 pattern_br_b=pattern_to.zw;\r\nvec2 imagecoord=mod(v_pos_a,1.0);\r\nvec2 pos=mix(pattern_tl_a/u_texsize,pattern_br_a/u_texsize,imagecoord);\r\nvec4 color1=texture2D(u_image,pos);\r\nvec2 imagecoord_b=mod(v_pos_b,1.0);\r\nvec2 pos2=mix(pattern_tl_b/u_texsize,pattern_br_b/u_texsize,imagecoord_b);\r\nvec4 color2=texture2D(u_image,pos2);\r\nvec4 out_color=mix(color1,color2,u_fade);\r\n#ifdef FOG\r\nout_color=fog_dither(fog_apply_premultiplied(out_color,v_fog_pos));\r\n#endif\r\ngl_FragColor=out_color*opacity;\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\n}";
 
-var fillPatternVert = "uniform mat4 u_matrix;uniform vec2 u_pixel_coord_upper;uniform vec2 u_pixel_coord_lower;uniform vec3 u_scale;attribute vec2 a_pos;varying vec2 v_pos_a;varying vec2 v_pos_b;\n#pragma mapbox: define lowp float opacity\n#pragma mapbox: define lowp vec4 pattern_from\n#pragma mapbox: define lowp vec4 pattern_to\n#pragma mapbox: define lowp float pixel_ratio_from\n#pragma mapbox: define lowp float pixel_ratio_to\nvoid main() {\n#pragma mapbox: initialize lowp float opacity\n#pragma mapbox: initialize mediump vec4 pattern_from\n#pragma mapbox: initialize mediump vec4 pattern_to\n#pragma mapbox: initialize lowp float pixel_ratio_from\n#pragma mapbox: initialize lowp float pixel_ratio_to\nvec2 pattern_tl_a=pattern_from.xy;vec2 pattern_br_a=pattern_from.zw;vec2 pattern_tl_b=pattern_to.xy;vec2 pattern_br_b=pattern_to.zw;float tileZoomRatio=u_scale.x;float fromScale=u_scale.y;float toScale=u_scale.z;vec2 display_size_a=(pattern_br_a-pattern_tl_a)/pixel_ratio_from;vec2 display_size_b=(pattern_br_b-pattern_tl_b)/pixel_ratio_to;gl_Position=u_matrix*vec4(a_pos,0,1);v_pos_a=get_pattern_pos(u_pixel_coord_upper,u_pixel_coord_lower,fromScale*display_size_a,tileZoomRatio,a_pos);v_pos_b=get_pattern_pos(u_pixel_coord_upper,u_pixel_coord_lower,toScale*display_size_b,tileZoomRatio,a_pos);\n#ifdef FOG\nv_fog_pos=fog_position(a_pos);\n#endif\n}";
+var fillPatternVert = "uniform mat4 u_matrix;\r\nuniform vec2 u_pixel_coord_upper;\r\nuniform vec2 u_pixel_coord_lower;\r\nuniform vec3 u_scale;\r\nattribute vec2 a_pos;\r\nvarying vec2 v_pos_a;\r\nvarying vec2 v_pos_b;\r\n#pragma mapbox: define lowp float opacity\r\n#pragma mapbox: define lowp vec4 pattern_from\r\n#pragma mapbox: define lowp vec4 pattern_to\r\n#pragma mapbox: define lowp float pixel_ratio_from\r\n#pragma mapbox: define lowp float pixel_ratio_to\r\nvoid main() {\r\n#pragma mapbox: initialize lowp float opacity\r\n#pragma mapbox: initialize mediump vec4 pattern_from\r\n#pragma mapbox: initialize mediump vec4 pattern_to\r\n#pragma mapbox: initialize lowp float pixel_ratio_from\r\n#pragma mapbox: initialize lowp float pixel_ratio_to\r\nvec2 pattern_tl_a=pattern_from.xy;\r\nvec2 pattern_br_a=pattern_from.zw;\r\nvec2 pattern_tl_b=pattern_to.xy;\r\nvec2 pattern_br_b=pattern_to.zw;\r\nfloat tileZoomRatio=u_scale.x;\r\nfloat fromScale=u_scale.y;\r\nfloat toScale=u_scale.z;\r\nvec2 display_size_a=(pattern_br_a-pattern_tl_a)/pixel_ratio_from;\r\nvec2 display_size_b=(pattern_br_b-pattern_tl_b)/pixel_ratio_to;\r\ngl_Position=u_matrix*vec4(a_pos,0,1);\r\nv_pos_a=get_pattern_pos(u_pixel_coord_upper,u_pixel_coord_lower,fromScale*display_size_a,tileZoomRatio,a_pos);\r\nv_pos_b=get_pattern_pos(u_pixel_coord_upper,u_pixel_coord_lower,toScale*display_size_b,tileZoomRatio,a_pos);\r\n#ifdef FOG\r\nv_fog_pos=fog_position(a_pos);\r\n#endif\r\n}";
 
-var fillExtrusionFrag = "varying vec4 v_color;void main() {vec4 color=v_color;\n#ifdef FOG\ncolor=fog_dither(fog_apply_premultiplied(color,v_fog_pos));\n#endif\ngl_FragColor=color;\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}";
+var fillExtrusionFrag = "varying vec4 v_color;\r\nvoid main() {\r\nvec4 color=v_color;\r\n#ifdef FOG\r\ncolor=fog_dither(fog_apply_premultiplied(color,v_fog_pos));\r\n#endif\r\ngl_FragColor=color;\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\n}";
 
-var fillExtrusionVert = "uniform mat4 u_matrix;uniform vec3 u_lightcolor;uniform lowp vec3 u_lightpos;uniform lowp float u_lightintensity;uniform float u_vertical_gradient;uniform lowp float u_opacity;attribute vec4 a_pos_normal_ed;attribute vec2 a_centroid_pos;\n#ifdef PROJECTION_GLOBE_VIEW\nattribute vec3 a_pos_3;attribute vec3 a_pos_normal_3;uniform mat4 u_inv_rot_matrix;uniform vec2 u_merc_center;uniform vec3 u_tile_id;uniform float u_zoom_transition;uniform vec3 u_up_dir;uniform float u_height_lift;\n#endif\nvarying vec4 v_color;\n#pragma mapbox: define highp float base\n#pragma mapbox: define highp float height\n#pragma mapbox: define highp vec4 color\nvoid main() {\n#pragma mapbox: initialize highp float base\n#pragma mapbox: initialize highp float height\n#pragma mapbox: initialize highp vec4 color\nvec3 pos_nx=floor(a_pos_normal_ed.xyz*0.5);mediump vec3 top_up_ny=a_pos_normal_ed.xyz-2.0*pos_nx;float x_normal=pos_nx.z/8192.0;vec3 normal=top_up_ny.y==1.0 ? vec3(0.0,0.0,1.0) : normalize(vec3(x_normal,(2.0*top_up_ny.z-1.0)*(1.0-abs(x_normal)),0.0));base=max(0.0,base);height=max(0.0,height);float t=top_up_ny.x;vec2 centroid_pos=vec2(0.0);\n#if defined(HAS_CENTROID) || defined(TERRAIN)\ncentroid_pos=a_centroid_pos;\n#endif\n#ifdef TERRAIN\nbool flat_roof=centroid_pos.x !=0.0 && t > 0.0;float ele=elevation(pos_nx.xy);float c_ele=flat_roof ? centroid_pos.y==0.0 ? elevationFromUint16(centroid_pos.x) : flatElevation(centroid_pos) : ele;float h=flat_roof ? max(c_ele+height,ele+base+2.0) : ele+(t > 0.0 ? height : base==0.0 ?-5.0 : base);vec3 pos=vec3(pos_nx.xy,h);\n#else\nvec3 pos=vec3(pos_nx.xy,t > 0.0 ? height : base);\n#endif\n#ifdef PROJECTION_GLOBE_VIEW\nfloat lift=float((t+base) > 0.0)*u_height_lift;vec3 globe_normal=normalize(mix(a_pos_normal_3/16384.0,u_up_dir,u_zoom_transition));vec3 globe_pos=a_pos_3+globe_normal*(u_tile_up_scale*(pos.z+lift));vec3 merc_pos=mercator_tile_position(u_inv_rot_matrix,pos.xy,u_tile_id,u_merc_center)+u_up_dir*u_tile_up_scale*pos.z;pos=mix_globe_mercator(globe_pos,merc_pos,u_zoom_transition);\n#endif\nfloat hidden=float(centroid_pos.x==0.0 && centroid_pos.y==1.0);gl_Position=mix(u_matrix*vec4(pos,1),AWAY,hidden);float colorvalue=color.r*0.2126+color.g*0.7152+color.b*0.0722;v_color=vec4(0.0,0.0,0.0,1.0);vec4 ambientlight=vec4(0.03,0.03,0.03,1.0);color+=ambientlight;float directional=clamp(dot(normal,u_lightpos),0.0,1.0);directional=mix((1.0-u_lightintensity),max((1.0-colorvalue+u_lightintensity),1.0),directional);if (normal.y !=0.0) {directional*=(\n(1.0-u_vertical_gradient)+(u_vertical_gradient*clamp((t+base)*pow(height/150.0,0.5),mix(0.7,0.98,1.0-u_lightintensity),1.0)));}v_color.rgb+=clamp(color.rgb*directional*u_lightcolor,mix(vec3(0.0),vec3(0.3),1.0-u_lightcolor),vec3(1.0));v_color*=u_opacity;\n#ifdef FOG\nv_fog_pos=fog_position(pos);\n#endif\n}";
+var fillExtrusionVert = "uniform mat4 u_matrix;\r\nuniform vec3 u_lightcolor;\r\nuniform lowp vec3 u_lightpos;\r\nuniform lowp float u_lightintensity;\r\nuniform float u_vertical_gradient;\r\nuniform lowp float u_opacity;\r\nattribute vec4 a_pos_normal_ed;\r\nattribute vec2 a_centroid_pos;\r\n#ifdef PROJECTION_GLOBE_VIEW\r\nattribute vec3 a_pos_3;attribute vec3 a_pos_normal_3;uniform mat4 u_inv_rot_matrix;\r\nuniform vec2 u_merc_center;\r\nuniform vec3 u_tile_id;\r\nuniform float u_zoom_transition;\r\nuniform vec3 u_up_dir;\r\nuniform float u_height_lift;\r\n#endif\r\nvarying vec4 v_color;\r\n#pragma mapbox: define highp float base\r\n#pragma mapbox: define highp float height\r\n#pragma mapbox: define highp vec4 color\r\nvoid main() {\r\n#pragma mapbox: initialize highp float base\r\n#pragma mapbox: initialize highp float height\r\n#pragma mapbox: initialize highp vec4 color\r\nvec3 pos_nx=floor(a_pos_normal_ed.xyz*0.5);mediump vec3 top_up_ny=a_pos_normal_ed.xyz-2.0*pos_nx;\r\nfloat x_normal=pos_nx.z/8192.0;\r\nvec3 normal=top_up_ny.y==1.0 ? vec3(0.0,0.0,1.0) : normalize(vec3(x_normal,(2.0*top_up_ny.z-1.0)*(1.0-abs(x_normal)),0.0));\r\nbase=max(0.0,base);\r\nheight=max(0.0,height);\r\nfloat t=top_up_ny.x;\r\nvec2 centroid_pos=vec2(0.0);\r\n#if defined(HAS_CENTROID) || defined(TERRAIN)\r\ncentroid_pos=a_centroid_pos;\r\n#endif\r\n#ifdef TERRAIN\r\nbool flat_roof=centroid_pos.x !=0.0 && t > 0.0;\r\nfloat ele=elevation(pos_nx.xy);\r\nfloat c_ele=flat_roof ? centroid_pos.y==0.0 ? elevationFromUint16(centroid_pos.x) : flatElevation(centroid_pos) : ele;float h=flat_roof ? max(c_ele+height,ele+base+2.0) : ele+(t > 0.0 ? height : base==0.0 ?-5.0 : base);\r\nvec3 pos=vec3(pos_nx.xy,h);\r\n#else\r\nvec3 pos=vec3(pos_nx.xy,t > 0.0 ? height : base);\r\n#endif\r\n#ifdef PROJECTION_GLOBE_VIEW\nfloat lift=float((t+base) > 0.0)*u_height_lift;\r\nvec3 globe_normal=normalize(mix(a_pos_normal_3/16384.0,u_up_dir,u_zoom_transition));\r\nvec3 globe_pos=a_pos_3+globe_normal*(u_tile_up_scale*(pos.z+lift));\r\nvec3 merc_pos=mercator_tile_position(u_inv_rot_matrix,pos.xy,u_tile_id,u_merc_center)+u_up_dir*u_tile_up_scale*pos.z;\r\npos=mix_globe_mercator(globe_pos,merc_pos,u_zoom_transition);\r\n#endif\r\nfloat hidden=float(centroid_pos.x==0.0 && centroid_pos.y==1.0);\r\ngl_Position=mix(u_matrix*vec4(pos,1),AWAY,hidden);float colorvalue=color.r*0.2126+color.g*0.7152+color.b*0.0722;\r\nv_color=vec4(0.0,0.0,0.0,1.0);vec4 ambientlight=vec4(0.03,0.03,0.03,1.0);\r\ncolor+=ambientlight;float directional=clamp(dot(normal,u_lightpos),0.0,1.0);directional=mix((1.0-u_lightintensity),max((1.0-colorvalue+u_lightintensity),1.0),directional);if (normal.y !=0.0) {directional*=(\r\n(1.0-u_vertical_gradient)+\n(u_vertical_gradient*clamp((t+base)*pow(height/150.0,0.5),mix(0.7,0.98,1.0-u_lightintensity),1.0)));\r\n}v_color.rgb+=clamp(color.rgb*directional*u_lightcolor,mix(vec3(0.0),vec3(0.3),1.0-u_lightcolor),vec3(1.0));\r\nv_color*=u_opacity;\r\n#ifdef FOG\r\nv_fog_pos=fog_position(pos);\r\n#endif\r\n}";
 
-var fillExtrusionPatternFrag = "uniform vec2 u_texsize;uniform float u_fade;uniform sampler2D u_image;varying vec2 v_pos_a;varying vec2 v_pos_b;varying vec4 v_lighting;\n#pragma mapbox: define lowp float base\n#pragma mapbox: define lowp float height\n#pragma mapbox: define lowp vec4 pattern_from\n#pragma mapbox: define lowp vec4 pattern_to\n#pragma mapbox: define lowp float pixel_ratio_from\n#pragma mapbox: define lowp float pixel_ratio_to\nvoid main() {\n#pragma mapbox: initialize lowp float base\n#pragma mapbox: initialize lowp float height\n#pragma mapbox: initialize mediump vec4 pattern_from\n#pragma mapbox: initialize mediump vec4 pattern_to\n#pragma mapbox: initialize lowp float pixel_ratio_from\n#pragma mapbox: initialize lowp float pixel_ratio_to\nvec2 pattern_tl_a=pattern_from.xy;vec2 pattern_br_a=pattern_from.zw;vec2 pattern_tl_b=pattern_to.xy;vec2 pattern_br_b=pattern_to.zw;vec2 imagecoord=mod(v_pos_a,1.0);vec2 pos=mix(pattern_tl_a/u_texsize,pattern_br_a/u_texsize,imagecoord);vec4 color1=texture2D(u_image,pos);vec2 imagecoord_b=mod(v_pos_b,1.0);vec2 pos2=mix(pattern_tl_b/u_texsize,pattern_br_b/u_texsize,imagecoord_b);vec4 color2=texture2D(u_image,pos2);vec4 out_color=mix(color1,color2,u_fade);out_color=out_color*v_lighting;\n#ifdef FOG\nout_color=fog_dither(fog_apply_premultiplied(out_color,v_fog_pos));\n#endif\ngl_FragColor=out_color;\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}";
+var fillExtrusionPatternFrag = "uniform vec2 u_texsize;\r\nuniform float u_fade;\r\nuniform sampler2D u_image;\r\nvarying vec2 v_pos_a;\r\nvarying vec2 v_pos_b;\r\nvarying vec4 v_lighting;\r\n#pragma mapbox: define lowp float base\r\n#pragma mapbox: define lowp float height\r\n#pragma mapbox: define lowp vec4 pattern_from\r\n#pragma mapbox: define lowp vec4 pattern_to\r\n#pragma mapbox: define lowp float pixel_ratio_from\r\n#pragma mapbox: define lowp float pixel_ratio_to\r\nvoid main() {\r\n#pragma mapbox: initialize lowp float base\r\n#pragma mapbox: initialize lowp float height\r\n#pragma mapbox: initialize mediump vec4 pattern_from\r\n#pragma mapbox: initialize mediump vec4 pattern_to\r\n#pragma mapbox: initialize lowp float pixel_ratio_from\r\n#pragma mapbox: initialize lowp float pixel_ratio_to\r\nvec2 pattern_tl_a=pattern_from.xy;\r\nvec2 pattern_br_a=pattern_from.zw;\r\nvec2 pattern_tl_b=pattern_to.xy;\r\nvec2 pattern_br_b=pattern_to.zw;\r\nvec2 imagecoord=mod(v_pos_a,1.0);\r\nvec2 pos=mix(pattern_tl_a/u_texsize,pattern_br_a/u_texsize,imagecoord);\r\nvec4 color1=texture2D(u_image,pos);\r\nvec2 imagecoord_b=mod(v_pos_b,1.0);\r\nvec2 pos2=mix(pattern_tl_b/u_texsize,pattern_br_b/u_texsize,imagecoord_b);\r\nvec4 color2=texture2D(u_image,pos2);\r\nvec4 out_color=mix(color1,color2,u_fade);\r\nout_color=out_color*v_lighting;\r\n#ifdef FOG\r\nout_color=fog_dither(fog_apply_premultiplied(out_color,v_fog_pos));\r\n#endif\r\ngl_FragColor=out_color;\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\n}";
 
-var fillExtrusionPatternVert = "uniform mat4 u_matrix;uniform vec2 u_pixel_coord_upper;uniform vec2 u_pixel_coord_lower;uniform float u_height_factor;uniform vec3 u_scale;uniform float u_vertical_gradient;uniform lowp float u_opacity;uniform vec3 u_lightcolor;uniform lowp vec3 u_lightpos;uniform lowp float u_lightintensity;attribute vec4 a_pos_normal_ed;attribute vec2 a_centroid_pos;\n#ifdef PROJECTION_GLOBE_VIEW\nattribute vec3 a_pos_3;attribute vec3 a_pos_normal_3;uniform mat4 u_inv_rot_matrix;uniform vec2 u_merc_center;uniform vec3 u_tile_id;uniform float u_zoom_transition;uniform vec3 u_up_dir;uniform float u_height_lift;\n#endif\nvarying vec2 v_pos_a;varying vec2 v_pos_b;varying vec4 v_lighting;\n#pragma mapbox: define lowp float base\n#pragma mapbox: define lowp float height\n#pragma mapbox: define lowp vec4 pattern_from\n#pragma mapbox: define lowp vec4 pattern_to\n#pragma mapbox: define lowp float pixel_ratio_from\n#pragma mapbox: define lowp float pixel_ratio_to\nvoid main() {\n#pragma mapbox: initialize lowp float base\n#pragma mapbox: initialize lowp float height\n#pragma mapbox: initialize mediump vec4 pattern_from\n#pragma mapbox: initialize mediump vec4 pattern_to\n#pragma mapbox: initialize lowp float pixel_ratio_from\n#pragma mapbox: initialize lowp float pixel_ratio_to\nvec2 pattern_tl_a=pattern_from.xy;vec2 pattern_br_a=pattern_from.zw;vec2 pattern_tl_b=pattern_to.xy;vec2 pattern_br_b=pattern_to.zw;float tileRatio=u_scale.x;float fromScale=u_scale.y;float toScale=u_scale.z;vec3 pos_nx=floor(a_pos_normal_ed.xyz*0.5);mediump vec3 top_up_ny=a_pos_normal_ed.xyz-2.0*pos_nx;float x_normal=pos_nx.z/8192.0;vec3 normal=top_up_ny.y==1.0 ? vec3(0.0,0.0,1.0) : normalize(vec3(x_normal,(2.0*top_up_ny.z-1.0)*(1.0-abs(x_normal)),0.0));float edgedistance=a_pos_normal_ed.w;vec2 display_size_a=(pattern_br_a-pattern_tl_a)/pixel_ratio_from;vec2 display_size_b=(pattern_br_b-pattern_tl_b)/pixel_ratio_to;base=max(0.0,base);height=max(0.0,height);float t=top_up_ny.x;float z=t > 0.0 ? height : base;vec2 centroid_pos=vec2(0.0);\n#if defined(HAS_CENTROID) || defined(TERRAIN)\ncentroid_pos=a_centroid_pos;\n#endif\n#ifdef TERRAIN\nbool flat_roof=centroid_pos.x !=0.0 && t > 0.0;float ele=elevation(pos_nx.xy);float c_ele=flat_roof ? centroid_pos.y==0.0 ? elevationFromUint16(centroid_pos.x) : flatElevation(centroid_pos) : ele;float h=flat_roof ? max(c_ele+height,ele+base+2.0) : ele+(t > 0.0 ? height : base==0.0 ?-5.0 : base);vec3 p=vec3(pos_nx.xy,h);\n#else\nvec3 p=vec3(pos_nx.xy,z);\n#endif\n#ifdef PROJECTION_GLOBE_VIEW\nfloat lift=float((t+base) > 0.0)*u_height_lift;vec3 globe_normal=normalize(mix(a_pos_normal_3/16384.0,u_up_dir,u_zoom_transition));vec3 globe_pos=a_pos_3+globe_normal*(u_tile_up_scale*(p.z+lift));vec3 merc_pos=mercator_tile_position(u_inv_rot_matrix,p.xy,u_tile_id,u_merc_center)+u_up_dir*u_tile_up_scale*p.z;p=mix_globe_mercator(globe_pos,merc_pos,u_zoom_transition);\n#endif\nfloat hidden=float(centroid_pos.x==0.0 && centroid_pos.y==1.0);gl_Position=mix(u_matrix*vec4(p,1),AWAY,hidden);vec2 pos=normal.z==1.0\n? pos_nx.xy\n: vec2(edgedistance,z*u_height_factor);v_pos_a=get_pattern_pos(u_pixel_coord_upper,u_pixel_coord_lower,fromScale*display_size_a,tileRatio,pos);v_pos_b=get_pattern_pos(u_pixel_coord_upper,u_pixel_coord_lower,toScale*display_size_b,tileRatio,pos);v_lighting=vec4(0.0,0.0,0.0,1.0);float directional=clamp(dot(normal,u_lightpos),0.0,1.0);directional=mix((1.0-u_lightintensity),max((0.5+u_lightintensity),1.0),directional);if (normal.y !=0.0) {directional*=(\n(1.0-u_vertical_gradient)+(u_vertical_gradient*clamp((t+base)*pow(height/150.0,0.5),mix(0.7,0.98,1.0-u_lightintensity),1.0)));}v_lighting.rgb+=clamp(directional*u_lightcolor,mix(vec3(0.0),vec3(0.3),1.0-u_lightcolor),vec3(1.0));v_lighting*=u_opacity;\n#ifdef FOG\nv_fog_pos=fog_position(p);\n#endif\n}";
+var fillExtrusionPatternVert = "uniform mat4 u_matrix;\r\nuniform vec2 u_pixel_coord_upper;\r\nuniform vec2 u_pixel_coord_lower;\r\nuniform float u_height_factor;\r\nuniform vec3 u_scale;\r\nuniform float u_vertical_gradient;\r\nuniform lowp float u_opacity;\r\nuniform vec3 u_lightcolor;\r\nuniform lowp vec3 u_lightpos;\r\nuniform lowp float u_lightintensity;\r\nattribute vec4 a_pos_normal_ed;\r\nattribute vec2 a_centroid_pos;\r\n#ifdef PROJECTION_GLOBE_VIEW\r\nattribute vec3 a_pos_3;attribute vec3 a_pos_normal_3;uniform mat4 u_inv_rot_matrix;\r\nuniform vec2 u_merc_center;\r\nuniform vec3 u_tile_id;\r\nuniform float u_zoom_transition;\r\nuniform vec3 u_up_dir;\r\nuniform float u_height_lift;\r\n#endif\r\nvarying vec2 v_pos_a;\r\nvarying vec2 v_pos_b;\r\nvarying vec4 v_lighting;\r\n#pragma mapbox: define lowp float base\r\n#pragma mapbox: define lowp float height\r\n#pragma mapbox: define lowp vec4 pattern_from\r\n#pragma mapbox: define lowp vec4 pattern_to\r\n#pragma mapbox: define lowp float pixel_ratio_from\r\n#pragma mapbox: define lowp float pixel_ratio_to\r\nvoid main() {\r\n#pragma mapbox: initialize lowp float base\r\n#pragma mapbox: initialize lowp float height\r\n#pragma mapbox: initialize mediump vec4 pattern_from\r\n#pragma mapbox: initialize mediump vec4 pattern_to\r\n#pragma mapbox: initialize lowp float pixel_ratio_from\r\n#pragma mapbox: initialize lowp float pixel_ratio_to\r\nvec2 pattern_tl_a=pattern_from.xy;\r\nvec2 pattern_br_a=pattern_from.zw;\r\nvec2 pattern_tl_b=pattern_to.xy;\r\nvec2 pattern_br_b=pattern_to.zw;\r\nfloat tileRatio=u_scale.x;\r\nfloat fromScale=u_scale.y;\r\nfloat toScale=u_scale.z;\r\nvec3 pos_nx=floor(a_pos_normal_ed.xyz*0.5);mediump vec3 top_up_ny=a_pos_normal_ed.xyz-2.0*pos_nx;\r\nfloat x_normal=pos_nx.z/8192.0;\r\nvec3 normal=top_up_ny.y==1.0 ? vec3(0.0,0.0,1.0) : normalize(vec3(x_normal,(2.0*top_up_ny.z-1.0)*(1.0-abs(x_normal)),0.0));\r\nfloat edgedistance=a_pos_normal_ed.w;\r\nvec2 display_size_a=(pattern_br_a-pattern_tl_a)/pixel_ratio_from;\r\nvec2 display_size_b=(pattern_br_b-pattern_tl_b)/pixel_ratio_to;\r\nbase=max(0.0,base);\r\nheight=max(0.0,height);\r\nfloat t=top_up_ny.x;\r\nfloat z=t > 0.0 ? height : base;\r\nvec2 centroid_pos=vec2(0.0);\r\n#if defined(HAS_CENTROID) || defined(TERRAIN)\r\ncentroid_pos=a_centroid_pos;\r\n#endif\r\n#ifdef TERRAIN\r\nbool flat_roof=centroid_pos.x !=0.0 && t > 0.0;\r\nfloat ele=elevation(pos_nx.xy);\r\nfloat c_ele=flat_roof ? centroid_pos.y==0.0 ? elevationFromUint16(centroid_pos.x) : flatElevation(centroid_pos) : ele;float h=flat_roof ? max(c_ele+height,ele+base+2.0) : ele+(t > 0.0 ? height : base==0.0 ?-5.0 : base);\r\nvec3 p=vec3(pos_nx.xy,h);\r\n#else\r\nvec3 p=vec3(pos_nx.xy,z);\r\n#endif\r\n#ifdef PROJECTION_GLOBE_VIEW\nfloat lift=float((t+base) > 0.0)*u_height_lift;\r\nvec3 globe_normal=normalize(mix(a_pos_normal_3/16384.0,u_up_dir,u_zoom_transition));\r\nvec3 globe_pos=a_pos_3+globe_normal*(u_tile_up_scale*(p.z+lift));\r\nvec3 merc_pos=mercator_tile_position(u_inv_rot_matrix,p.xy,u_tile_id,u_merc_center)+u_up_dir*u_tile_up_scale*p.z;\r\np=mix_globe_mercator(globe_pos,merc_pos,u_zoom_transition);\r\n#endif\r\nfloat hidden=float(centroid_pos.x==0.0 && centroid_pos.y==1.0);\r\ngl_Position=mix(u_matrix*vec4(p,1),AWAY,hidden);\r\nvec2 pos=normal.z==1.0\r\n? pos_nx.xy\n: vec2(edgedistance,z*u_height_factor);v_pos_a=get_pattern_pos(u_pixel_coord_upper,u_pixel_coord_lower,fromScale*display_size_a,tileRatio,pos);\r\nv_pos_b=get_pattern_pos(u_pixel_coord_upper,u_pixel_coord_lower,toScale*display_size_b,tileRatio,pos);\r\nv_lighting=vec4(0.0,0.0,0.0,1.0);\r\nfloat directional=clamp(dot(normal,u_lightpos),0.0,1.0);\r\ndirectional=mix((1.0-u_lightintensity),max((0.5+u_lightintensity),1.0),directional);\r\nif (normal.y !=0.0) {directional*=(\r\n(1.0-u_vertical_gradient)+\n(u_vertical_gradient*clamp((t+base)*pow(height/150.0,0.5),mix(0.7,0.98,1.0-u_lightintensity),1.0)));\r\n}\r\nv_lighting.rgb+=clamp(directional*u_lightcolor,mix(vec3(0.0),vec3(0.3),1.0-u_lightcolor),vec3(1.0));\r\nv_lighting*=u_opacity;\r\n#ifdef FOG\r\nv_fog_pos=fog_position(p);\r\n#endif\r\n}";
 
-var hillshadePrepareFrag = "#ifdef GL_ES\nprecision highp float;\n#endif\nuniform sampler2D u_image;varying vec2 v_pos;uniform vec2 u_dimension;uniform float u_zoom;uniform vec4 u_unpack;float getElevation(vec2 coord) {\n#ifdef TERRAIN_DEM_FLOAT_FORMAT\nreturn texture2D(u_image,coord).a/4.0;\n#else\nvec4 data=texture2D(u_image,coord)*255.0;data.a=-1.0;return dot(data,u_unpack)/4.0;\n#endif\n}void main() {vec2 epsilon=1.0/u_dimension;float a=getElevation(v_pos+vec2(-epsilon.x,-epsilon.y));float b=getElevation(v_pos+vec2(0,-epsilon.y));float c=getElevation(v_pos+vec2(epsilon.x,-epsilon.y));float d=getElevation(v_pos+vec2(-epsilon.x,0));float e=getElevation(v_pos);float f=getElevation(v_pos+vec2(epsilon.x,0));float g=getElevation(v_pos+vec2(-epsilon.x,epsilon.y));float h=getElevation(v_pos+vec2(0,epsilon.y));float i=getElevation(v_pos+vec2(epsilon.x,epsilon.y));float exaggerationFactor=u_zoom < 2.0 ? 0.4 : u_zoom < 4.5 ? 0.35 : 0.3;float exaggeration=u_zoom < 15.0 ? (u_zoom-15.0)*exaggerationFactor : 0.0;vec2 deriv=vec2(\n(c+f+f+i)-(a+d+d+g),(g+h+h+i)-(a+b+b+c)\n)/pow(2.0,exaggeration+(19.2562-u_zoom));gl_FragColor=clamp(vec4(\nderiv.x/2.0+0.5,deriv.y/2.0+0.5,1.0,1.0),0.0,1.0);\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}";
+var hillshadePrepareFrag = "#ifdef GL_ES\r\nprecision highp float;\r\n#endif\r\nuniform sampler2D u_image;\r\nvarying vec2 v_pos;\r\nuniform vec2 u_dimension;\r\nuniform float u_zoom;\r\nuniform vec4 u_unpack;\r\nfloat getElevation(vec2 coord) {\r\n#ifdef TERRAIN_DEM_FLOAT_FORMAT\r\nreturn texture2D(u_image,coord).a/4.0;\r\n#else\nvec4 data=texture2D(u_image,coord)*255.0;\r\ndata.a=-1.0;\r\nreturn dot(data,u_unpack)/4.0;\r\n#endif\r\n}\r\nvoid main() {\r\nvec2 epsilon=1.0/u_dimension;float a=getElevation(v_pos+vec2(-epsilon.x,-epsilon.y));\r\nfloat b=getElevation(v_pos+vec2(0,-epsilon.y));\r\nfloat c=getElevation(v_pos+vec2(epsilon.x,-epsilon.y));\r\nfloat d=getElevation(v_pos+vec2(-epsilon.x,0));\r\nfloat e=getElevation(v_pos);\r\nfloat f=getElevation(v_pos+vec2(epsilon.x,0));\r\nfloat g=getElevation(v_pos+vec2(-epsilon.x,epsilon.y));\r\nfloat h=getElevation(v_pos+vec2(0,epsilon.y));\r\nfloat i=getElevation(v_pos+vec2(epsilon.x,epsilon.y));float exaggerationFactor=u_zoom < 2.0 ? 0.4 : u_zoom < 4.5 ? 0.35 : 0.3;\r\nfloat exaggeration=u_zoom < 15.0 ? (u_zoom-15.0)*exaggerationFactor : 0.0;\r\nvec2 deriv=vec2(\r\n(c+f+f+i)-(a+d+d+g),(g+h+h+i)-(a+b+b+c)\r\n)/pow(2.0,exaggeration+(19.2562-u_zoom));\r\ngl_FragColor=clamp(vec4(\r\nderiv.x/2.0+0.5,deriv.y/2.0+0.5,1.0,1.0),0.0,1.0);\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\n}";
 
-var hillshadePrepareVert = "uniform mat4 u_matrix;uniform vec2 u_dimension;attribute vec2 a_pos;attribute vec2 a_texture_pos;varying vec2 v_pos;void main() {gl_Position=u_matrix*vec4(a_pos,0,1);highp vec2 epsilon=1.0/u_dimension;float scale=(u_dimension.x-2.0)/u_dimension.x;v_pos=(a_texture_pos/8192.0)*scale+epsilon;}";
+var hillshadePrepareVert = "uniform mat4 u_matrix;\r\nuniform vec2 u_dimension;\r\nattribute vec2 a_pos;\r\nattribute vec2 a_texture_pos;\r\nvarying vec2 v_pos;\r\nvoid main() {\r\ngl_Position=u_matrix*vec4(a_pos,0,1);\r\nhighp vec2 epsilon=1.0/u_dimension;\r\nfloat scale=(u_dimension.x-2.0)/u_dimension.x;\r\nv_pos=(a_texture_pos/8192.0)*scale+epsilon;\r\n}";
 
-var hillshadeFrag = "uniform sampler2D u_image;varying vec2 v_pos;uniform vec2 u_latrange;uniform vec2 u_light;uniform vec4 u_shadow;uniform vec4 u_highlight;uniform vec4 u_accent;void main() {vec4 pixel=texture2D(u_image,v_pos);vec2 deriv=((pixel.rg*2.0)-1.0);float scaleFactor=cos(radians((u_latrange[0]-u_latrange[1])*(1.0-v_pos.y)+u_latrange[1]));float slope=atan(1.25*length(deriv)/scaleFactor);float aspect=deriv.x !=0.0 ? atan(deriv.y,-deriv.x) : PI/2.0*(deriv.y > 0.0 ? 1.0 :-1.0);float intensity=u_light.x;float azimuth=u_light.y+PI;float base=1.875-intensity*1.75;float maxValue=0.5*PI;float scaledSlope=intensity !=0.5 ? ((pow(base,slope)-1.0)/(pow(base,maxValue)-1.0))*maxValue : slope;float accent=cos(scaledSlope);vec4 accent_color=(1.0-accent)*u_accent*clamp(intensity*2.0,0.0,1.0);float shade=abs(mod((aspect+azimuth)/PI+0.5,2.0)-1.0);vec4 shade_color=mix(u_shadow,u_highlight,shade)*sin(scaledSlope)*clamp(intensity*2.0,0.0,1.0);gl_FragColor=accent_color*(1.0-shade_color.a)+shade_color;\n#ifdef FOG\ngl_FragColor=fog_dither(fog_apply_premultiplied(gl_FragColor,v_fog_pos));\n#endif\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}";
+var hillshadeFrag = "uniform sampler2D u_image;\r\nvarying vec2 v_pos;\r\nuniform vec2 u_latrange;\r\nuniform vec2 u_light;\r\nuniform vec4 u_shadow;\r\nuniform vec4 u_highlight;\r\nuniform vec4 u_accent;\r\nvoid main() {\r\nvec4 pixel=texture2D(u_image,v_pos);\r\nvec2 deriv=((pixel.rg*2.0)-1.0);float scaleFactor=cos(radians((u_latrange[0]-u_latrange[1])*(1.0-v_pos.y)+u_latrange[1]));float slope=atan(1.25*length(deriv)/scaleFactor);\r\nfloat aspect=deriv.x !=0.0 ? atan(deriv.y,-deriv.x) : PI/2.0*(deriv.y > 0.0 ? 1.0 :-1.0);\r\nfloat intensity=u_light.x;float azimuth=u_light.y+PI;float base=1.875-intensity*1.75;\r\nfloat maxValue=0.5*PI;\r\nfloat scaledSlope=intensity !=0.5 ? ((pow(base,slope)-1.0)/(pow(base,maxValue)-1.0))*maxValue : slope;float accent=cos(scaledSlope);vec4 accent_color=(1.0-accent)*u_accent*clamp(intensity*2.0,0.0,1.0);\r\nfloat shade=abs(mod((aspect+azimuth)/PI+0.5,2.0)-1.0);\r\nvec4 shade_color=mix(u_shadow,u_highlight,shade)*sin(scaledSlope)*clamp(intensity*2.0,0.0,1.0);\r\ngl_FragColor=accent_color*(1.0-shade_color.a)+shade_color;\r\n#ifdef FOG\r\ngl_FragColor=fog_dither(fog_apply_premultiplied(gl_FragColor,v_fog_pos));\r\n#endif\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\n}";
 
-var hillshadeVert = "uniform mat4 u_matrix;attribute vec2 a_pos;attribute vec2 a_texture_pos;varying vec2 v_pos;void main() {gl_Position=u_matrix*vec4(a_pos,0,1);v_pos=a_texture_pos/8192.0;\n#ifdef FOG\nv_fog_pos=fog_position(a_pos);\n#endif\n}";
+var hillshadeVert = "uniform mat4 u_matrix;\r\nattribute vec2 a_pos;\r\nattribute vec2 a_texture_pos;\r\nvarying vec2 v_pos;\r\nvoid main() {\r\ngl_Position=u_matrix*vec4(a_pos,0,1);\r\nv_pos=a_texture_pos/8192.0;\r\n#ifdef FOG\r\nv_fog_pos=fog_position(a_pos);\r\n#endif\r\n}";
 
-var lineFrag = "uniform lowp float u_device_pixel_ratio;uniform float u_alpha_discard_threshold;uniform highp vec2 u_trim_offset;varying vec2 v_width2;varying vec2 v_normal;varying float v_gamma_scale;varying highp vec4 v_uv;\n#ifdef RENDER_LINE_DASH\nuniform sampler2D u_dash_image;uniform float u_mix;uniform vec3 u_scale;varying vec2 v_tex_a;varying vec2 v_tex_b;\n#endif\n#ifdef RENDER_LINE_GRADIENT\nuniform sampler2D u_gradient_image;\n#endif\n#pragma mapbox: define highp vec4 color\n#pragma mapbox: define lowp float floorwidth\n#pragma mapbox: define lowp vec4 dash_from\n#pragma mapbox: define lowp vec4 dash_to\n#pragma mapbox: define lowp float blur\n#pragma mapbox: define lowp float opacity\nvoid main() {\n#pragma mapbox: initialize highp vec4 color\n#pragma mapbox: initialize lowp float floorwidth\n#pragma mapbox: initialize lowp vec4 dash_from\n#pragma mapbox: initialize lowp vec4 dash_to\n#pragma mapbox: initialize lowp float blur\n#pragma mapbox: initialize lowp float opacity\nfloat dist=length(v_normal)*v_width2.s;float blur2=(blur+1.0/u_device_pixel_ratio)*v_gamma_scale;float alpha=clamp(min(dist-(v_width2.t-blur2),v_width2.s-dist)/blur2,0.0,1.0);\n#ifdef RENDER_LINE_DASH\nfloat sdfdist_a=texture2D(u_dash_image,v_tex_a).a;float sdfdist_b=texture2D(u_dash_image,v_tex_b).a;float sdfdist=mix(sdfdist_a,sdfdist_b,u_mix);float sdfwidth=min(dash_from.z*u_scale.y,dash_to.z*u_scale.z);float sdfgamma=1.0/(2.0*u_device_pixel_ratio)/sdfwidth;alpha*=smoothstep(0.5-sdfgamma/floorwidth,0.5+sdfgamma/floorwidth,sdfdist);\n#endif\n#ifdef RENDER_LINE_GRADIENT\nhighp vec4 out_color=texture2D(u_gradient_image,v_uv.xy);\n#else\nvec4 out_color=color;\n#endif\n#ifdef RENDER_LINE_TRIM_OFFSET\nhighp float start=v_uv[2];highp float end=v_uv[3];highp float trim_start=u_trim_offset[0];highp float trim_end=u_trim_offset[1];highp float line_progress=(start+(v_uv.x)*(end-start));if (trim_end > trim_start) {if (line_progress <=trim_end && line_progress >=trim_start) {out_color=vec4(0,0,0,0);}}\n#endif\n#ifdef FOG\nout_color=fog_dither(fog_apply_premultiplied(out_color,v_fog_pos));\n#endif\n#ifdef RENDER_LINE_ALPHA_DISCARD\nif (alpha < u_alpha_discard_threshold) {discard;}\n#endif\ngl_FragColor=out_color*(alpha*opacity);\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}";
+var lineFrag = "uniform lowp float u_device_pixel_ratio;\r\nuniform float u_alpha_discard_threshold;\r\nuniform highp vec2 u_trim_offset;\r\nvarying vec2 v_width2;\r\nvarying vec2 v_normal;\r\nvarying float v_gamma_scale;\r\nvarying highp vec4 v_uv;\r\n#ifdef RENDER_LINE_DASH\r\nuniform sampler2D u_dash_image;\r\nuniform float u_mix;\r\nuniform vec3 u_scale;\r\nvarying vec2 v_tex_a;\r\nvarying vec2 v_tex_b;\r\n#endif\r\n#ifdef RENDER_LINE_GRADIENT\r\nuniform sampler2D u_gradient_image;\r\n#endif\r\n#pragma mapbox: define highp vec4 color\r\n#pragma mapbox: define lowp float floorwidth\r\n#pragma mapbox: define lowp vec4 dash_from\r\n#pragma mapbox: define lowp vec4 dash_to\r\n#pragma mapbox: define lowp float blur\r\n#pragma mapbox: define lowp float opacity\r\nvoid main() {\r\n#pragma mapbox: initialize highp vec4 color\r\n#pragma mapbox: initialize lowp float floorwidth\r\n#pragma mapbox: initialize lowp vec4 dash_from\r\n#pragma mapbox: initialize lowp vec4 dash_to\r\n#pragma mapbox: initialize lowp float blur\r\n#pragma mapbox: initialize lowp float opacity\nfloat dist=length(v_normal)*v_width2.s;float blur2=(blur+1.0/u_device_pixel_ratio)*v_gamma_scale;\r\nfloat alpha=clamp(min(dist-(v_width2.t-blur2),v_width2.s-dist)/blur2,0.0,1.0);\r\n#ifdef RENDER_LINE_DASH\r\nfloat sdfdist_a=texture2D(u_dash_image,v_tex_a).a;\r\nfloat sdfdist_b=texture2D(u_dash_image,v_tex_b).a;\r\nfloat sdfdist=mix(sdfdist_a,sdfdist_b,u_mix);\r\nfloat sdfwidth=min(dash_from.z*u_scale.y,dash_to.z*u_scale.z);\r\nfloat sdfgamma=1.0/(2.0*u_device_pixel_ratio)/sdfwidth;\r\nalpha*=smoothstep(0.5-sdfgamma/floorwidth,0.5+sdfgamma/floorwidth,sdfdist);\r\n#endif\r\n#ifdef RENDER_LINE_GRADIENT\nhighp vec4 out_color=texture2D(u_gradient_image,v_uv.xy);\r\n#else\r\nvec4 out_color=color;\r\n#endif\r\n#ifdef RENDER_LINE_TRIM_OFFSET\nhighp float start=v_uv[2];\r\nhighp float end=v_uv[3];\r\nhighp float trim_start=u_trim_offset[0];\r\nhighp float trim_end=u_trim_offset[1];highp float line_progress=(start+(v_uv.x)*(end-start));if (trim_end > trim_start) {\r\nif (line_progress <=trim_end && line_progress >=trim_start) {\r\nout_color=vec4(0,0,0,0);\r\n}\r\n}\r\n#endif\r\n#ifdef FOG\r\nout_color=fog_dither(fog_apply_premultiplied(out_color,v_fog_pos));\r\n#endif\r\n#ifdef RENDER_LINE_ALPHA_DISCARD\r\nif (alpha < u_alpha_discard_threshold) {\r\ndiscard;\r\n}\r\n#endif\r\ngl_FragColor=out_color*(alpha*opacity);\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\n}";
 
-var lineVert = "\n#define EXTRUDE_SCALE 0.015873016\nattribute vec2 a_pos_normal;attribute vec4 a_data;\n#if defined(RENDER_LINE_GRADIENT) || defined(RENDER_LINE_TRIM_OFFSET)\nattribute highp vec4 a_packed;\n#endif\n#ifdef RENDER_LINE_DASH\nattribute float a_linesofar;\n#endif\nuniform mat4 u_matrix;uniform mat2 u_pixels_to_tile_units;uniform vec2 u_units_to_pixels;uniform lowp float u_device_pixel_ratio;varying vec2 v_normal;varying vec2 v_width2;varying float v_gamma_scale;varying highp vec4 v_uv;\n#ifdef RENDER_LINE_DASH\nuniform vec2 u_texsize;uniform mediump vec3 u_scale;varying vec2 v_tex_a;varying vec2 v_tex_b;\n#endif\n#ifdef RENDER_LINE_GRADIENT\nuniform float u_image_height;\n#endif\n#pragma mapbox: define highp vec4 color\n#pragma mapbox: define lowp float floorwidth\n#pragma mapbox: define lowp vec4 dash_from\n#pragma mapbox: define lowp vec4 dash_to\n#pragma mapbox: define lowp float blur\n#pragma mapbox: define lowp float opacity\n#pragma mapbox: define mediump float gapwidth\n#pragma mapbox: define lowp float offset\n#pragma mapbox: define mediump float width\nvoid main() {\n#pragma mapbox: initialize highp vec4 color\n#pragma mapbox: initialize lowp float floorwidth\n#pragma mapbox: initialize lowp vec4 dash_from\n#pragma mapbox: initialize lowp vec4 dash_to\n#pragma mapbox: initialize lowp float blur\n#pragma mapbox: initialize lowp float opacity\n#pragma mapbox: initialize mediump float gapwidth\n#pragma mapbox: initialize lowp float offset\n#pragma mapbox: initialize mediump float width\nfloat ANTIALIASING=1.0/u_device_pixel_ratio/2.0;vec2 a_extrude=a_data.xy-128.0;float a_direction=mod(a_data.z,4.0)-1.0;vec2 pos=floor(a_pos_normal*0.5);mediump vec2 normal=a_pos_normal-2.0*pos;normal.y=normal.y*2.0-1.0;v_normal=normal;gapwidth=gapwidth/2.0;float halfwidth=width/2.0;offset=-1.0*offset;float inset=gapwidth+(gapwidth > 0.0 ? ANTIALIASING : 0.0);float outset=gapwidth+halfwidth*(gapwidth > 0.0 ? 2.0 : 1.0)+(halfwidth==0.0 ? 0.0 : ANTIALIASING);mediump vec2 dist=outset*a_extrude*EXTRUDE_SCALE;mediump float u=0.5*a_direction;mediump float t=1.0-abs(u);mediump vec2 offset2=offset*a_extrude*EXTRUDE_SCALE*normal.y*mat2(t,-u,u,t);vec4 projected_extrude=u_matrix*vec4(dist*u_pixels_to_tile_units,0.0,0.0);gl_Position=u_matrix*vec4(pos+offset2*u_pixels_to_tile_units,0.0,1.0)+projected_extrude;\n#ifndef RENDER_TO_TEXTURE\nfloat extrude_length_without_perspective=length(dist);float extrude_length_with_perspective=length(projected_extrude.xy/gl_Position.w*u_units_to_pixels);v_gamma_scale=extrude_length_without_perspective/extrude_length_with_perspective;\n#else\nv_gamma_scale=1.0;\n#endif\n#if defined(RENDER_LINE_GRADIENT) || defined(RENDER_LINE_TRIM_OFFSET)\nfloat a_uv_x=a_packed[0];float a_split_index=a_packed[1];highp float a_clip_start=a_packed[2];highp float a_clip_end=a_packed[3];\n#ifdef RENDER_LINE_GRADIENT\nhighp float texel_height=1.0/u_image_height;highp float half_texel_height=0.5*texel_height;v_uv=vec4(a_uv_x,a_split_index*texel_height-half_texel_height,a_clip_start,a_clip_end);\n#else\nv_uv=vec4(a_uv_x,0.0,a_clip_start,a_clip_end);\n#endif\n#endif\n#ifdef RENDER_LINE_DASH\nfloat tileZoomRatio=u_scale.x;float fromScale=u_scale.y;float toScale=u_scale.z;float scaleA=dash_from.z==0.0 ? 0.0 : tileZoomRatio/(dash_from.z*fromScale);float scaleB=dash_to.z==0.0 ? 0.0 : tileZoomRatio/(dash_to.z*toScale);float heightA=dash_from.y;float heightB=dash_to.y;v_tex_a=vec2(a_linesofar*scaleA/floorwidth,(-normal.y*heightA+dash_from.x+0.5)/u_texsize.y);v_tex_b=vec2(a_linesofar*scaleB/floorwidth,(-normal.y*heightB+dash_to.x+0.5)/u_texsize.y);\n#endif\nv_width2=vec2(outset,inset);\n#ifdef FOG\nv_fog_pos=fog_position(pos);\n#endif\n}";
+var lineVert = "\n#define EXTRUDE_SCALE 0.015873016\r\nattribute vec2 a_pos_normal;\r\nattribute vec4 a_data;\n#if defined(RENDER_LINE_GRADIENT) || defined(RENDER_LINE_TRIM_OFFSET)\r\nattribute highp vec4 a_packed;\r\n#endif\r\n#ifdef RENDER_LINE_DASH\r\nattribute float a_linesofar;\r\n#endif\r\nuniform mat4 u_matrix;\r\nuniform mat2 u_pixels_to_tile_units;\r\nuniform vec2 u_units_to_pixels;\r\nuniform lowp float u_device_pixel_ratio;\r\nvarying vec2 v_normal;\r\nvarying vec2 v_width2;\r\nvarying float v_gamma_scale;\r\nvarying highp vec4 v_uv;\r\n#ifdef RENDER_LINE_DASH\r\nuniform vec2 u_texsize;\r\nuniform mediump vec3 u_scale;\r\nvarying vec2 v_tex_a;\r\nvarying vec2 v_tex_b;\r\n#endif\r\n#ifdef RENDER_LINE_GRADIENT\r\nuniform float u_image_height;\r\n#endif\r\n#pragma mapbox: define highp vec4 color\r\n#pragma mapbox: define lowp float floorwidth\r\n#pragma mapbox: define lowp vec4 dash_from\r\n#pragma mapbox: define lowp vec4 dash_to\r\n#pragma mapbox: define lowp float blur\r\n#pragma mapbox: define lowp float opacity\r\n#pragma mapbox: define mediump float gapwidth\r\n#pragma mapbox: define lowp float offset\r\n#pragma mapbox: define mediump float width\r\nvoid main() {\r\n#pragma mapbox: initialize highp vec4 color\r\n#pragma mapbox: initialize lowp float floorwidth\r\n#pragma mapbox: initialize lowp vec4 dash_from\r\n#pragma mapbox: initialize lowp vec4 dash_to\r\n#pragma mapbox: initialize lowp float blur\r\n#pragma mapbox: initialize lowp float opacity\r\n#pragma mapbox: initialize mediump float gapwidth\r\n#pragma mapbox: initialize lowp float offset\r\n#pragma mapbox: initialize mediump float width\nfloat ANTIALIASING=1.0/u_device_pixel_ratio/2.0;\r\nvec2 a_extrude=a_data.xy-128.0;\r\nfloat a_direction=mod(a_data.z,4.0)-1.0;\r\nvec2 pos=floor(a_pos_normal*0.5);mediump vec2 normal=a_pos_normal-2.0*pos;\r\nnormal.y=normal.y*2.0-1.0;\r\nv_normal=normal;gapwidth=gapwidth/2.0;\r\nfloat halfwidth=width/2.0;\r\noffset=-1.0*offset;\r\nfloat inset=gapwidth+(gapwidth > 0.0 ? ANTIALIASING : 0.0);\r\nfloat outset=gapwidth+halfwidth*(gapwidth > 0.0 ? 2.0 : 1.0)+(halfwidth==0.0 ? 0.0 : ANTIALIASING);mediump vec2 dist=outset*a_extrude*EXTRUDE_SCALE;mediump float u=0.5*a_direction;\r\nmediump float t=1.0-abs(u);\r\nmediump vec2 offset2=offset*a_extrude*EXTRUDE_SCALE*normal.y*mat2(t,-u,u,t);\r\nvec4 projected_extrude=u_matrix*vec4(dist*u_pixels_to_tile_units,0.0,0.0);\r\ngl_Position=u_matrix*vec4(pos+offset2*u_pixels_to_tile_units,0.0,1.0)+projected_extrude;\r\n#ifndef RENDER_TO_TEXTURE\nfloat extrude_length_without_perspective=length(dist);\r\nfloat extrude_length_with_perspective=length(projected_extrude.xy/gl_Position.w*u_units_to_pixels);\r\nv_gamma_scale=extrude_length_without_perspective/extrude_length_with_perspective;\r\n#else\r\nv_gamma_scale=1.0;\r\n#endif\r\n#if defined(RENDER_LINE_GRADIENT) || defined(RENDER_LINE_TRIM_OFFSET)\r\nfloat a_uv_x=a_packed[0];\r\nfloat a_split_index=a_packed[1];\r\nhighp float a_clip_start=a_packed[2];\r\nhighp float a_clip_end=a_packed[3];\r\n#ifdef RENDER_LINE_GRADIENT\r\nhighp float texel_height=1.0/u_image_height;\r\nhighp float half_texel_height=0.5*texel_height;\r\nv_uv=vec4(a_uv_x,a_split_index*texel_height-half_texel_height,a_clip_start,a_clip_end);\r\n#else\r\nv_uv=vec4(a_uv_x,0.0,a_clip_start,a_clip_end);\r\n#endif\r\n#endif\r\n#ifdef RENDER_LINE_DASH\r\nfloat tileZoomRatio=u_scale.x;\r\nfloat fromScale=u_scale.y;\r\nfloat toScale=u_scale.z;\r\nfloat scaleA=dash_from.z==0.0 ? 0.0 : tileZoomRatio/(dash_from.z*fromScale);\r\nfloat scaleB=dash_to.z==0.0 ? 0.0 : tileZoomRatio/(dash_to.z*toScale);\r\nfloat heightA=dash_from.y;\r\nfloat heightB=dash_to.y;\r\nv_tex_a=vec2(a_linesofar*scaleA/floorwidth,(-normal.y*heightA+dash_from.x+0.5)/u_texsize.y);\r\nv_tex_b=vec2(a_linesofar*scaleB/floorwidth,(-normal.y*heightB+dash_to.x+0.5)/u_texsize.y);\r\n#endif\r\nv_width2=vec2(outset,inset);\r\n#ifdef FOG\r\nv_fog_pos=fog_position(pos);\r\n#endif\r\n}";
 
-var linePatternFrag = "uniform lowp float u_device_pixel_ratio;uniform vec2 u_texsize;uniform float u_fade;uniform mediump vec3 u_scale;uniform sampler2D u_image;varying vec2 v_normal;varying vec2 v_width2;varying float v_linesofar;varying float v_gamma_scale;varying float v_width;\n#pragma mapbox: define lowp vec4 pattern_from\n#pragma mapbox: define lowp vec4 pattern_to\n#pragma mapbox: define lowp float pixel_ratio_from\n#pragma mapbox: define lowp float pixel_ratio_to\n#pragma mapbox: define lowp float blur\n#pragma mapbox: define lowp float opacity\nvoid main() {\n#pragma mapbox: initialize mediump vec4 pattern_from\n#pragma mapbox: initialize mediump vec4 pattern_to\n#pragma mapbox: initialize lowp float pixel_ratio_from\n#pragma mapbox: initialize lowp float pixel_ratio_to\n#pragma mapbox: initialize lowp float blur\n#pragma mapbox: initialize lowp float opacity\nvec2 pattern_tl_a=pattern_from.xy;vec2 pattern_br_a=pattern_from.zw;vec2 pattern_tl_b=pattern_to.xy;vec2 pattern_br_b=pattern_to.zw;float tileZoomRatio=u_scale.x;float fromScale=u_scale.y;float toScale=u_scale.z;vec2 display_size_a=(pattern_br_a-pattern_tl_a)/pixel_ratio_from;vec2 display_size_b=(pattern_br_b-pattern_tl_b)/pixel_ratio_to;vec2 pattern_size_a=vec2(display_size_a.x*fromScale/tileZoomRatio,display_size_a.y);vec2 pattern_size_b=vec2(display_size_b.x*toScale/tileZoomRatio,display_size_b.y);float aspect_a=display_size_a.y/v_width;float aspect_b=display_size_b.y/v_width;float dist=length(v_normal)*v_width2.s;float blur2=(blur+1.0/u_device_pixel_ratio)*v_gamma_scale;float alpha=clamp(min(dist-(v_width2.t-blur2),v_width2.s-dist)/blur2,0.0,1.0);float x_a=mod(v_linesofar/pattern_size_a.x*aspect_a,1.0);float x_b=mod(v_linesofar/pattern_size_b.x*aspect_b,1.0);float y=0.5*v_normal.y+0.5;vec2 texel_size=1.0/u_texsize;vec2 pos_a=mix(pattern_tl_a*texel_size-texel_size,pattern_br_a*texel_size+texel_size,vec2(x_a,y));vec2 pos_b=mix(pattern_tl_b*texel_size-texel_size,pattern_br_b*texel_size+texel_size,vec2(x_b,y));vec4 color=mix(texture2D(u_image,pos_a),texture2D(u_image,pos_b),u_fade);\n#ifdef FOG\ncolor=fog_dither(fog_apply_premultiplied(color,v_fog_pos));\n#endif\ngl_FragColor=color*(alpha*opacity);\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}";
+var linePatternFrag = "uniform lowp float u_device_pixel_ratio;\r\nuniform vec2 u_texsize;\r\nuniform float u_fade;\r\nuniform mediump vec3 u_scale;\r\nuniform sampler2D u_image;\r\nvarying vec2 v_normal;\r\nvarying vec2 v_width2;\r\nvarying float v_linesofar;\r\nvarying float v_gamma_scale;\r\nvarying float v_width;\r\n#pragma mapbox: define lowp vec4 pattern_from\r\n#pragma mapbox: define lowp vec4 pattern_to\r\n#pragma mapbox: define lowp float pixel_ratio_from\r\n#pragma mapbox: define lowp float pixel_ratio_to\r\n#pragma mapbox: define lowp float blur\r\n#pragma mapbox: define lowp float opacity\r\nvoid main() {\r\n#pragma mapbox: initialize mediump vec4 pattern_from\r\n#pragma mapbox: initialize mediump vec4 pattern_to\r\n#pragma mapbox: initialize lowp float pixel_ratio_from\r\n#pragma mapbox: initialize lowp float pixel_ratio_to\r\n#pragma mapbox: initialize lowp float blur\r\n#pragma mapbox: initialize lowp float opacity\r\nvec2 pattern_tl_a=pattern_from.xy;\r\nvec2 pattern_br_a=pattern_from.zw;\r\nvec2 pattern_tl_b=pattern_to.xy;\r\nvec2 pattern_br_b=pattern_to.zw;\r\nfloat tileZoomRatio=u_scale.x;\r\nfloat fromScale=u_scale.y;\r\nfloat toScale=u_scale.z;\r\nvec2 display_size_a=(pattern_br_a-pattern_tl_a)/pixel_ratio_from;\r\nvec2 display_size_b=(pattern_br_b-pattern_tl_b)/pixel_ratio_to;\r\nvec2 pattern_size_a=vec2(display_size_a.x*fromScale/tileZoomRatio,display_size_a.y);\r\nvec2 pattern_size_b=vec2(display_size_b.x*toScale/tileZoomRatio,display_size_b.y);\r\nfloat aspect_a=display_size_a.y/v_width;\r\nfloat aspect_b=display_size_b.y/v_width;float dist=length(v_normal)*v_width2.s;float blur2=(blur+1.0/u_device_pixel_ratio)*v_gamma_scale;\r\nfloat alpha=clamp(min(dist-(v_width2.t-blur2),v_width2.s-dist)/blur2,0.0,1.0);\r\nfloat x_a=mod(v_linesofar/pattern_size_a.x*aspect_a,1.0);\r\nfloat x_b=mod(v_linesofar/pattern_size_b.x*aspect_b,1.0);\r\nfloat y=0.5*v_normal.y+0.5;\r\nvec2 texel_size=1.0/u_texsize;\r\nvec2 pos_a=mix(pattern_tl_a*texel_size-texel_size,pattern_br_a*texel_size+texel_size,vec2(x_a,y));\r\nvec2 pos_b=mix(pattern_tl_b*texel_size-texel_size,pattern_br_b*texel_size+texel_size,vec2(x_b,y));\r\nvec4 color=mix(texture2D(u_image,pos_a),texture2D(u_image,pos_b),u_fade);\r\n#ifdef FOG\r\ncolor=fog_dither(fog_apply_premultiplied(color,v_fog_pos));\r\n#endif\r\ngl_FragColor=color*(alpha*opacity);\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\n}";
 
-var linePatternVert = "\n#define scale 0.015873016\nattribute vec2 a_pos_normal;attribute vec4 a_data;attribute float a_linesofar;uniform mat4 u_matrix;uniform vec2 u_units_to_pixels;uniform mat2 u_pixels_to_tile_units;uniform lowp float u_device_pixel_ratio;varying vec2 v_normal;varying vec2 v_width2;varying float v_linesofar;varying float v_gamma_scale;varying float v_width;\n#pragma mapbox: define lowp float blur\n#pragma mapbox: define lowp float opacity\n#pragma mapbox: define lowp float offset\n#pragma mapbox: define mediump float gapwidth\n#pragma mapbox: define mediump float width\n#pragma mapbox: define lowp float floorwidth\n#pragma mapbox: define lowp vec4 pattern_from\n#pragma mapbox: define lowp vec4 pattern_to\n#pragma mapbox: define lowp float pixel_ratio_from\n#pragma mapbox: define lowp float pixel_ratio_to\nvoid main() {\n#pragma mapbox: initialize lowp float blur\n#pragma mapbox: initialize lowp float opacity\n#pragma mapbox: initialize lowp float offset\n#pragma mapbox: initialize mediump float gapwidth\n#pragma mapbox: initialize mediump float width\n#pragma mapbox: initialize lowp float floorwidth\n#pragma mapbox: initialize mediump vec4 pattern_from\n#pragma mapbox: initialize mediump vec4 pattern_to\n#pragma mapbox: initialize lowp float pixel_ratio_from\n#pragma mapbox: initialize lowp float pixel_ratio_to\nfloat ANTIALIASING=1.0/u_device_pixel_ratio/2.0;vec2 a_extrude=a_data.xy-128.0;float a_direction=mod(a_data.z,4.0)-1.0;vec2 pos=floor(a_pos_normal*0.5);mediump vec2 normal=a_pos_normal-2.0*pos;normal.y=normal.y*2.0-1.0;v_normal=normal;gapwidth=gapwidth/2.0;float halfwidth=width/2.0;offset=-1.0*offset;float inset=gapwidth+(gapwidth > 0.0 ? ANTIALIASING : 0.0);float outset=gapwidth+halfwidth*(gapwidth > 0.0 ? 2.0 : 1.0)+(halfwidth==0.0 ? 0.0 : ANTIALIASING);mediump vec2 dist=outset*a_extrude*scale;mediump float u=0.5*a_direction;mediump float t=1.0-abs(u);mediump vec2 offset2=offset*a_extrude*scale*normal.y*mat2(t,-u,u,t);vec4 projected_extrude=u_matrix*vec4(dist*u_pixels_to_tile_units,0.0,0.0);gl_Position=u_matrix*vec4(pos+offset2*u_pixels_to_tile_units,0.0,1.0)+projected_extrude;\n#ifndef RENDER_TO_TEXTURE\nfloat extrude_length_without_perspective=length(dist);float extrude_length_with_perspective=length(projected_extrude.xy/gl_Position.w*u_units_to_pixels);v_gamma_scale=extrude_length_without_perspective/extrude_length_with_perspective;\n#else\nv_gamma_scale=1.0;\n#endif\nv_linesofar=a_linesofar;v_width2=vec2(outset,inset);v_width=floorwidth;\n#ifdef FOG\nv_fog_pos=fog_position(pos);\n#endif\n}";
+var linePatternVert = "\n#define scale 0.015873016\r\nattribute vec2 a_pos_normal;\r\nattribute vec4 a_data;\r\nattribute float a_linesofar;\r\nuniform mat4 u_matrix;\r\nuniform vec2 u_units_to_pixels;\r\nuniform mat2 u_pixels_to_tile_units;\r\nuniform lowp float u_device_pixel_ratio;\r\nvarying vec2 v_normal;\r\nvarying vec2 v_width2;\r\nvarying float v_linesofar;\r\nvarying float v_gamma_scale;\r\nvarying float v_width;\r\n#pragma mapbox: define lowp float blur\r\n#pragma mapbox: define lowp float opacity\r\n#pragma mapbox: define lowp float offset\r\n#pragma mapbox: define mediump float gapwidth\r\n#pragma mapbox: define mediump float width\r\n#pragma mapbox: define lowp float floorwidth\r\n#pragma mapbox: define lowp vec4 pattern_from\r\n#pragma mapbox: define lowp vec4 pattern_to\r\n#pragma mapbox: define lowp float pixel_ratio_from\r\n#pragma mapbox: define lowp float pixel_ratio_to\r\nvoid main() {\r\n#pragma mapbox: initialize lowp float blur\r\n#pragma mapbox: initialize lowp float opacity\r\n#pragma mapbox: initialize lowp float offset\r\n#pragma mapbox: initialize mediump float gapwidth\r\n#pragma mapbox: initialize mediump float width\r\n#pragma mapbox: initialize lowp float floorwidth\r\n#pragma mapbox: initialize mediump vec4 pattern_from\r\n#pragma mapbox: initialize mediump vec4 pattern_to\r\n#pragma mapbox: initialize lowp float pixel_ratio_from\r\n#pragma mapbox: initialize lowp float pixel_ratio_to\nfloat ANTIALIASING=1.0/u_device_pixel_ratio/2.0;\r\nvec2 a_extrude=a_data.xy-128.0;\r\nfloat a_direction=mod(a_data.z,4.0)-1.0;vec2 pos=floor(a_pos_normal*0.5);mediump vec2 normal=a_pos_normal-2.0*pos;\r\nnormal.y=normal.y*2.0-1.0;\r\nv_normal=normal;gapwidth=gapwidth/2.0;\r\nfloat halfwidth=width/2.0;\r\noffset=-1.0*offset;\r\nfloat inset=gapwidth+(gapwidth > 0.0 ? ANTIALIASING : 0.0);\r\nfloat outset=gapwidth+halfwidth*(gapwidth > 0.0 ? 2.0 : 1.0)+(halfwidth==0.0 ? 0.0 : ANTIALIASING);mediump vec2 dist=outset*a_extrude*scale;mediump float u=0.5*a_direction;\r\nmediump float t=1.0-abs(u);\r\nmediump vec2 offset2=offset*a_extrude*scale*normal.y*mat2(t,-u,u,t);\r\nvec4 projected_extrude=u_matrix*vec4(dist*u_pixels_to_tile_units,0.0,0.0);\r\ngl_Position=u_matrix*vec4(pos+offset2*u_pixels_to_tile_units,0.0,1.0)+projected_extrude;\r\n#ifndef RENDER_TO_TEXTURE\nfloat extrude_length_without_perspective=length(dist);\r\nfloat extrude_length_with_perspective=length(projected_extrude.xy/gl_Position.w*u_units_to_pixels);\r\nv_gamma_scale=extrude_length_without_perspective/extrude_length_with_perspective;\r\n#else\r\nv_gamma_scale=1.0;\r\n#endif\r\nv_linesofar=a_linesofar;\r\nv_width2=vec2(outset,inset);\r\nv_width=floorwidth;\r\n#ifdef FOG\r\nv_fog_pos=fog_position(pos);\r\n#endif\r\n}";
 
-var rasterFrag = "uniform float u_fade_t;uniform float u_opacity;uniform sampler2D u_image0;uniform sampler2D u_image1;varying vec2 v_pos0;varying vec2 v_pos1;uniform float u_brightness_low;uniform float u_brightness_high;uniform float u_saturation_factor;uniform float u_contrast_factor;uniform vec3 u_spin_weights;void main() {vec4 color0=texture2D(u_image0,v_pos0);vec4 color1=texture2D(u_image1,v_pos1);if (color0.a > 0.0) {color0.rgb=color0.rgb/color0.a;}if (color1.a > 0.0) {color1.rgb=color1.rgb/color1.a;}vec4 color=mix(color0,color1,u_fade_t);color.a*=u_opacity;vec3 rgb=color.rgb;rgb=vec3(\ndot(rgb,u_spin_weights.xyz),dot(rgb,u_spin_weights.zxy),dot(rgb,u_spin_weights.yzx));float average=(color.r+color.g+color.b)/3.0;rgb+=(average-rgb)*u_saturation_factor;rgb=(rgb-0.5)*u_contrast_factor+0.5;vec3 u_high_vec=vec3(u_brightness_low,u_brightness_low,u_brightness_low);vec3 u_low_vec=vec3(u_brightness_high,u_brightness_high,u_brightness_high);vec3 out_color=mix(u_high_vec,u_low_vec,rgb);\n#ifdef FOG\nout_color=fog_dither(fog_apply(out_color,v_fog_pos));\n#endif\ngl_FragColor=vec4(out_color*color.a,color.a);\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}";
+var rasterFrag = "uniform float u_fade_t;\r\nuniform float u_opacity;\r\nuniform sampler2D u_image0;\r\nuniform sampler2D u_image1;\r\nvarying vec2 v_pos0;\r\nvarying vec2 v_pos1;\r\nuniform float u_brightness_low;\r\nuniform float u_brightness_high;\r\nuniform float u_saturation_factor;\r\nuniform float u_contrast_factor;\r\nuniform vec3 u_spin_weights;\r\nvoid main() {vec4 color0=texture2D(u_image0,v_pos0);\r\nvec4 color1=texture2D(u_image1,v_pos1);\r\nif (color0.a > 0.0) {\r\ncolor0.rgb=color0.rgb/color0.a;\r\n}\r\nif (color1.a > 0.0) {\r\ncolor1.rgb=color1.rgb/color1.a;\r\n}\r\nvec4 color=mix(color0,color1,u_fade_t);\r\ncolor.a*=u_opacity;\r\nvec3 rgb=color.rgb;rgb=vec3(\r\ndot(rgb,u_spin_weights.xyz),dot(rgb,u_spin_weights.zxy),dot(rgb,u_spin_weights.yzx));float average=(color.r+color.g+color.b)/3.0;\r\nrgb+=(average-rgb)*u_saturation_factor;rgb=(rgb-0.5)*u_contrast_factor+0.5;vec3 u_high_vec=vec3(u_brightness_low,u_brightness_low,u_brightness_low);\r\nvec3 u_low_vec=vec3(u_brightness_high,u_brightness_high,u_brightness_high);\r\nvec3 out_color=mix(u_high_vec,u_low_vec,rgb);\r\n#ifdef FOG\r\nout_color=fog_dither(fog_apply(out_color,v_fog_pos));\r\n#endif\r\ngl_FragColor=vec4(out_color*color.a,color.a);\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\n}";
 
-var rasterVert = "uniform mat4 u_matrix;uniform vec2 u_tl_parent;uniform float u_scale_parent;uniform vec2 u_perspective_transform;attribute vec2 a_pos;attribute vec2 a_texture_pos;varying vec2 v_pos0;varying vec2 v_pos1;void main() {float w=1.0+dot(a_texture_pos,u_perspective_transform);gl_Position=u_matrix*vec4(a_pos*w,0,w);v_pos0=a_texture_pos/8192.0;v_pos1=(v_pos0*u_scale_parent)+u_tl_parent;\n#ifdef FOG\nv_fog_pos=fog_position(a_pos);\n#endif\n}";
+var rasterVert = "uniform mat4 u_matrix;\r\nuniform vec2 u_tl_parent;\r\nuniform float u_scale_parent;\r\nuniform vec2 u_perspective_transform;\r\nattribute vec2 a_pos;\r\nattribute vec2 a_texture_pos;\r\nvarying vec2 v_pos0;\r\nvarying vec2 v_pos1;\r\nvoid main() {\r\nfloat w=1.0+dot(a_texture_pos,u_perspective_transform);\r\ngl_Position=u_matrix*vec4(a_pos*w,0,w);v_pos0=a_texture_pos/8192.0;\r\nv_pos1=(v_pos0*u_scale_parent)+u_tl_parent;\r\n#ifdef FOG\r\nv_fog_pos=fog_position(a_pos);\r\n#endif\r\n}";
 
-var symbolIconFrag = "uniform sampler2D u_texture;varying vec2 v_tex;varying float v_fade_opacity;\n#pragma mapbox: define lowp float opacity\nvoid main() {\n#pragma mapbox: initialize lowp float opacity\nlowp float alpha=opacity*v_fade_opacity;gl_FragColor=texture2D(u_texture,v_tex)*alpha;\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}";
+var symbolIconFrag = "uniform sampler2D u_texture;\r\nvarying vec2 v_tex;\r\nvarying float v_fade_opacity;\r\n#pragma mapbox: define lowp float opacity\r\nvoid main() {\r\n#pragma mapbox: initialize lowp float opacity\r\nlowp float alpha=opacity*v_fade_opacity;\r\ngl_FragColor=texture2D(u_texture,v_tex)*alpha;\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\n}";
 
-var symbolIconVert = "attribute vec4 a_pos_offset;attribute vec4 a_tex_size;attribute vec4 a_pixeloffset;attribute vec4 a_projected_pos;attribute float a_fade_opacity;\n#ifdef PROJECTION_GLOBE_VIEW\nattribute vec3 a_globe_anchor;attribute vec3 a_globe_normal;\n#endif\nuniform bool u_is_size_zoom_constant;uniform bool u_is_size_feature_constant;uniform highp float u_size_t;uniform highp float u_size;uniform highp float u_camera_to_center_distance;uniform bool u_rotate_symbol;uniform highp float u_aspect_ratio;uniform float u_fade_change;uniform mat4 u_matrix;uniform mat4 u_label_plane_matrix;uniform mat4 u_coord_matrix;uniform bool u_is_text;uniform bool u_pitch_with_map;uniform vec2 u_texsize;uniform vec3 u_up_vector;\n#ifdef PROJECTION_GLOBE_VIEW\nuniform vec3 u_tile_id;uniform mat4 u_inv_rot_matrix;uniform vec2 u_merc_center;uniform vec3 u_camera_forward;uniform float u_zoom_transition;uniform vec3 u_ecef_origin;uniform mat4 u_tile_matrix;\n#endif\nvarying vec2 v_tex;varying float v_fade_opacity;\n#pragma mapbox: define lowp float opacity\nvoid main() {\n#pragma mapbox: initialize lowp float opacity\nvec2 a_pos=a_pos_offset.xy;vec2 a_offset=a_pos_offset.zw;vec2 a_tex=a_tex_size.xy;vec2 a_size=a_tex_size.zw;float a_size_min=floor(a_size[0]*0.5);vec2 a_pxoffset=a_pixeloffset.xy;vec2 a_min_font_scale=a_pixeloffset.zw/256.0;highp float segment_angle=-a_projected_pos[3];float size;if (!u_is_size_zoom_constant && !u_is_size_feature_constant) {size=mix(a_size_min,a_size[1],u_size_t)/128.0;} else if (u_is_size_zoom_constant && !u_is_size_feature_constant) {size=a_size_min/128.0;} else {size=u_size;}vec2 tile_anchor=a_pos;vec3 h=elevationVector(tile_anchor)*elevation(tile_anchor);\n#ifdef PROJECTION_GLOBE_VIEW\nvec3 mercator_pos=mercator_tile_position(u_inv_rot_matrix,tile_anchor,u_tile_id,u_merc_center);vec3 world_pos=mix_globe_mercator(a_globe_anchor+h,mercator_pos,u_zoom_transition);vec4 ecef_point=u_tile_matrix*vec4(world_pos,1.0);vec3 origin_to_point=ecef_point.xyz-u_ecef_origin;float globe_occlusion_fade=dot(origin_to_point,u_camera_forward) >=0.0 ? 0.0 : 1.0;\n#else\nvec3 world_pos=vec3(tile_anchor,0)+h;float globe_occlusion_fade=1.0;\n#endif\nvec4 projected_point=u_matrix*vec4(world_pos,1);highp float camera_to_anchor_distance=projected_point.w;highp float distance_ratio=u_pitch_with_map ?\ncamera_to_anchor_distance/u_camera_to_center_distance :\nu_camera_to_center_distance/camera_to_anchor_distance;highp float perspective_ratio=clamp(\n0.5+0.5*distance_ratio,0.0,1.5);size*=perspective_ratio;float font_scale=u_is_text ? size/24.0 : size;highp float symbol_rotation=0.0;if (u_rotate_symbol) {\n#ifdef PROJECTION_GLOBE_VIEW\nvec3 displacement=vec3(a_globe_normal.z,0,-a_globe_normal.x);vec4 offsetProjected_point=u_matrix*vec4(a_globe_anchor+displacement,1);\n#else\nvec4 offsetProjected_point=u_matrix*vec4(tile_anchor+vec2(1,0),0,1);\n#endif\nvec2 a=projected_point.xy/projected_point.w;vec2 b=offsetProjected_point.xy/offsetProjected_point.w;symbol_rotation=atan((b.y-a.y)/u_aspect_ratio,b.x-a.x);}\n#ifdef PROJECTION_GLOBE_VIEW\nvec3 proj_pos=mix_globe_mercator(a_projected_pos.xyz+h,mercator_pos,u_zoom_transition);vec4 projected_pos=u_label_plane_matrix*vec4(proj_pos,1.0);\n#else\nvec4 projected_pos=u_label_plane_matrix*vec4(a_projected_pos.xy,h.z,1.0);\n#endif\nhighp float angle_sin=sin(segment_angle+symbol_rotation);highp float angle_cos=cos(segment_angle+symbol_rotation);mat2 rotation_matrix=mat2(angle_cos,-1.0*angle_sin,angle_sin,angle_cos);float z=0.0;vec2 offset=rotation_matrix*(a_offset/32.0*max(a_min_font_scale,font_scale)+a_pxoffset/16.0);\n#ifdef PITCH_WITH_MAP_TERRAIN\nvec4 tile_pos=u_label_plane_matrix_inv*vec4(a_projected_pos.xy+offset,0.0,1.0);z=elevation(tile_pos.xy);\n#endif\nfloat occlusion_fade=occlusionFade(projected_point)*globe_occlusion_fade;\n#ifdef PROJECTION_GLOBE_VIEW\nvec3 xAxis=u_pitch_with_map ? normalize(cross(a_globe_normal,u_up_vector)) : vec3(1,0,0);vec3 yAxis=u_pitch_with_map ? normalize(cross(a_globe_normal,xAxis)) : vec3(0,1,0);gl_Position=mix(u_coord_matrix*vec4(projected_pos.xyz/projected_pos.w+xAxis*offset.x+yAxis*offset.y,1.0),AWAY,float(projected_point.w <=0.0 || occlusion_fade==0.0));\n#else\ngl_Position=mix(u_coord_matrix*vec4(projected_pos.xy/projected_pos.w+offset,z,1.0),AWAY,float(projected_point.w <=0.0 || occlusion_fade==0.0));\n#endif\nfloat projection_transition_fade=1.0;\n#if defined(PROJECTED_POS_ON_VIEWPORT) && defined(PROJECTION_GLOBE_VIEW)\nprojection_transition_fade=1.0-step(EPSILON,u_zoom_transition);\n#endif\nv_tex=a_tex/u_texsize;vec2 fade_opacity=unpack_opacity(a_fade_opacity);float fade_change=fade_opacity[1] > 0.5 ? u_fade_change :-u_fade_change;v_fade_opacity=max(0.0,min(occlusion_fade,fade_opacity[0]+fade_change))*projection_transition_fade;}";
+var symbolIconVert = "attribute vec4 a_pos_offset;\r\nattribute vec4 a_tex_size;\r\nattribute vec4 a_pixeloffset;\r\nattribute vec4 a_projected_pos;\r\nattribute float a_fade_opacity;\r\n#ifdef PROJECTION_GLOBE_VIEW\r\nattribute vec3 a_globe_anchor;\r\nattribute vec3 a_globe_normal;\r\n#endif\r\nuniform bool u_is_size_zoom_constant;\r\nuniform bool u_is_size_feature_constant;\r\nuniform highp float u_size_t;uniform highp float u_size;uniform highp float u_camera_to_center_distance;\r\nuniform bool u_rotate_symbol;\r\nuniform highp float u_aspect_ratio;\r\nuniform float u_fade_change;\r\nuniform mat4 u_matrix;\r\nuniform mat4 u_label_plane_matrix;\r\nuniform mat4 u_coord_matrix;\r\nuniform bool u_is_text;\r\nuniform bool u_pitch_with_map;\r\nuniform vec2 u_texsize;\r\nuniform vec3 u_up_vector;\r\n#ifdef PROJECTION_GLOBE_VIEW\r\nuniform vec3 u_tile_id;\r\nuniform mat4 u_inv_rot_matrix;\r\nuniform vec2 u_merc_center;\r\nuniform vec3 u_camera_forward;\r\nuniform float u_zoom_transition;\r\nuniform vec3 u_ecef_origin;\r\nuniform mat4 u_tile_matrix;\r\n#endif\r\nvarying vec2 v_tex;\r\nvarying float v_fade_opacity;\r\n#pragma mapbox: define lowp float opacity\r\nvoid main() {\r\n#pragma mapbox: initialize lowp float opacity\r\nvec2 a_pos=a_pos_offset.xy;\r\nvec2 a_offset=a_pos_offset.zw;\r\nvec2 a_tex=a_tex_size.xy;\r\nvec2 a_size=a_tex_size.zw;\r\nfloat a_size_min=floor(a_size[0]*0.5);\r\nvec2 a_pxoffset=a_pixeloffset.xy;\r\nvec2 a_min_font_scale=a_pixeloffset.zw/256.0;\r\nhighp float segment_angle=-a_projected_pos[3];\r\nfloat size;\r\nif (!u_is_size_zoom_constant && !u_is_size_feature_constant) {\r\nsize=mix(a_size_min,a_size[1],u_size_t)/128.0;\r\n} else if (u_is_size_zoom_constant && !u_is_size_feature_constant) {\r\nsize=a_size_min/128.0;\r\n} else {\r\nsize=u_size;\r\n}\r\nvec2 tile_anchor=a_pos;\r\nvec3 h=elevationVector(tile_anchor)*elevation(tile_anchor);\r\n#ifdef PROJECTION_GLOBE_VIEW\r\nvec3 mercator_pos=mercator_tile_position(u_inv_rot_matrix,tile_anchor,u_tile_id,u_merc_center);\r\nvec3 world_pos=mix_globe_mercator(a_globe_anchor+h,mercator_pos,u_zoom_transition);\r\nvec4 ecef_point=u_tile_matrix*vec4(world_pos,1.0);\r\nvec3 origin_to_point=ecef_point.xyz-u_ecef_origin;float globe_occlusion_fade=dot(origin_to_point,u_camera_forward) >=0.0 ? 0.0 : 1.0;\r\n#else\r\nvec3 world_pos=vec3(tile_anchor,0)+h;\r\nfloat globe_occlusion_fade=1.0;\r\n#endif\r\nvec4 projected_point=u_matrix*vec4(world_pos,1);\r\nhighp float camera_to_anchor_distance=projected_point.w;highp float distance_ratio=u_pitch_with_map ?\r\ncamera_to_anchor_distance/u_camera_to_center_distance :\r\nu_camera_to_center_distance/camera_to_anchor_distance;\r\nhighp float perspective_ratio=clamp(\r\n0.5+0.5*distance_ratio,0.0,1.5);\r\nsize*=perspective_ratio;\r\nfloat font_scale=u_is_text ? size/24.0 : size;\r\nhighp float symbol_rotation=0.0;\r\nif (u_rotate_symbol) {\n#ifdef PROJECTION_GLOBE_VIEW\r\nvec3 displacement=vec3(a_globe_normal.z,0,-a_globe_normal.x);\r\nvec4 offsetProjected_point=u_matrix*vec4(a_globe_anchor+displacement,1);\r\n#else\r\nvec4 offsetProjected_point=u_matrix*vec4(tile_anchor+vec2(1,0),0,1);\r\n#endif\r\nvec2 a=projected_point.xy/projected_point.w;\r\nvec2 b=offsetProjected_point.xy/offsetProjected_point.w;\r\nsymbol_rotation=atan((b.y-a.y)/u_aspect_ratio,b.x-a.x);\r\n}\r\n#ifdef PROJECTION_GLOBE_VIEW\r\nvec3 proj_pos=mix_globe_mercator(a_projected_pos.xyz+h,mercator_pos,u_zoom_transition);\r\nvec4 projected_pos=u_label_plane_matrix*vec4(proj_pos,1.0);\r\n#else\r\nvec4 projected_pos=u_label_plane_matrix*vec4(a_projected_pos.xy,h.z,1.0);\r\n#endif\r\nhighp float angle_sin=sin(segment_angle+symbol_rotation);\r\nhighp float angle_cos=cos(segment_angle+symbol_rotation);\r\nmat2 rotation_matrix=mat2(angle_cos,-1.0*angle_sin,angle_sin,angle_cos);\r\nfloat z=0.0;\r\nvec2 offset=rotation_matrix*(a_offset/32.0*max(a_min_font_scale,font_scale)+a_pxoffset/16.0);\r\n#ifdef PITCH_WITH_MAP_TERRAIN\r\nvec4 tile_pos=u_label_plane_matrix_inv*vec4(a_projected_pos.xy+offset,0.0,1.0);\r\nz=elevation(tile_pos.xy);\r\n#endif\nfloat occlusion_fade=occlusionFade(projected_point)*globe_occlusion_fade;\r\n#ifdef PROJECTION_GLOBE_VIEW\nvec3 xAxis=u_pitch_with_map ? normalize(cross(a_globe_normal,u_up_vector)) : vec3(1,0,0);\r\nvec3 yAxis=u_pitch_with_map ? normalize(cross(a_globe_normal,xAxis)) : vec3(0,1,0);\r\ngl_Position=mix(u_coord_matrix*vec4(projected_pos.xyz/projected_pos.w+xAxis*offset.x+yAxis*offset.y,1.0),AWAY,float(projected_point.w <=0.0 || occlusion_fade==0.0));\r\n#else\r\ngl_Position=mix(u_coord_matrix*vec4(projected_pos.xy/projected_pos.w+offset,z,1.0),AWAY,float(projected_point.w <=0.0 || occlusion_fade==0.0));\r\n#endif\r\nfloat projection_transition_fade=1.0;\r\n#if defined(PROJECTED_POS_ON_VIEWPORT) && defined(PROJECTION_GLOBE_VIEW)\r\nprojection_transition_fade=1.0-step(EPSILON,u_zoom_transition);\r\n#endif\r\nv_tex=a_tex/u_texsize;\r\nvec2 fade_opacity=unpack_opacity(a_fade_opacity);\r\nfloat fade_change=fade_opacity[1] > 0.5 ? u_fade_change :-u_fade_change;\r\nv_fade_opacity=max(0.0,min(occlusion_fade,fade_opacity[0]+fade_change))*projection_transition_fade;\r\n}";
 
-var symbolSDFFrag = "#define SDF_PX 8.0\nuniform bool u_is_halo;uniform sampler2D u_texture;uniform highp float u_gamma_scale;uniform lowp float u_device_pixel_ratio;uniform bool u_is_text;varying vec2 v_data0;varying vec3 v_data1;\n#pragma mapbox: define highp vec4 fill_color\n#pragma mapbox: define highp vec4 halo_color\n#pragma mapbox: define lowp float opacity\n#pragma mapbox: define lowp float halo_width\n#pragma mapbox: define lowp float halo_blur\nvoid main() {\n#pragma mapbox: initialize highp vec4 fill_color\n#pragma mapbox: initialize highp vec4 halo_color\n#pragma mapbox: initialize lowp float opacity\n#pragma mapbox: initialize lowp float halo_width\n#pragma mapbox: initialize lowp float halo_blur\nfloat EDGE_GAMMA=0.105/u_device_pixel_ratio;vec2 tex=v_data0.xy;float gamma_scale=v_data1.x;float size=v_data1.y;float fade_opacity=v_data1[2];float fontScale=u_is_text ? size/24.0 : size;lowp vec4 color=fill_color;highp float gamma=EDGE_GAMMA/(fontScale*u_gamma_scale);lowp float buff=(256.0-64.0)/256.0;if (u_is_halo) {color=halo_color;gamma=(halo_blur*1.19/SDF_PX+EDGE_GAMMA)/(fontScale*u_gamma_scale);buff=(6.0-halo_width/fontScale)/SDF_PX;}lowp float dist=texture2D(u_texture,tex).a;highp float gamma_scaled=gamma*gamma_scale;highp float alpha=smoothstep(buff-gamma_scaled,buff+gamma_scaled,dist);gl_FragColor=color*(alpha*opacity*fade_opacity);\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}";
+var symbolSDFFrag = "#define SDF_PX 8.0\r\nuniform bool u_is_halo;\r\nuniform sampler2D u_texture;\r\nuniform highp float u_gamma_scale;\r\nuniform lowp float u_device_pixel_ratio;\r\nuniform bool u_is_text;\r\nvarying vec2 v_data0;\r\nvarying vec3 v_data1;\r\n#pragma mapbox: define highp vec4 fill_color\r\n#pragma mapbox: define highp vec4 halo_color\r\n#pragma mapbox: define lowp float opacity\r\n#pragma mapbox: define lowp float halo_width\r\n#pragma mapbox: define lowp float halo_blur\r\nvoid main() {\r\n#pragma mapbox: initialize highp vec4 fill_color\r\n#pragma mapbox: initialize highp vec4 halo_color\r\n#pragma mapbox: initialize lowp float opacity\r\n#pragma mapbox: initialize lowp float halo_width\r\n#pragma mapbox: initialize lowp float halo_blur\r\nfloat EDGE_GAMMA=0.105/u_device_pixel_ratio;\r\nvec2 tex=v_data0.xy;\r\nfloat gamma_scale=v_data1.x;\r\nfloat size=v_data1.y;\r\nfloat fade_opacity=v_data1[2];\r\nfloat fontScale=u_is_text ? size/24.0 : size;\r\nlowp vec4 color=fill_color;\r\nhighp float gamma=EDGE_GAMMA/(fontScale*u_gamma_scale);\r\nlowp float buff=(256.0-64.0)/256.0;\r\nif (u_is_halo) {\r\ncolor=halo_color;\r\ngamma=(halo_blur*1.19/SDF_PX+EDGE_GAMMA)/(fontScale*u_gamma_scale);\r\nbuff=(6.0-halo_width/fontScale)/SDF_PX;\r\n}\r\nlowp float dist=texture2D(u_texture,tex).a;\r\nhighp float gamma_scaled=gamma*gamma_scale;\r\nhighp float alpha=smoothstep(buff-gamma_scaled,buff+gamma_scaled,dist);\r\ngl_FragColor=color*(alpha*opacity*fade_opacity);\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\n}";
 
-var symbolSDFVert = "attribute vec4 a_pos_offset;attribute vec4 a_tex_size;attribute vec4 a_pixeloffset;attribute vec4 a_projected_pos;attribute float a_fade_opacity;\n#ifdef PROJECTION_GLOBE_VIEW\nattribute vec3 a_globe_anchor;attribute vec3 a_globe_normal;\n#endif\nuniform bool u_is_size_zoom_constant;uniform bool u_is_size_feature_constant;uniform highp float u_size_t;uniform highp float u_size;uniform mat4 u_matrix;uniform mat4 u_label_plane_matrix;uniform mat4 u_coord_matrix;uniform bool u_is_text;uniform bool u_pitch_with_map;uniform bool u_rotate_symbol;uniform highp float u_aspect_ratio;uniform highp float u_camera_to_center_distance;uniform float u_fade_change;uniform vec2 u_texsize;uniform vec3 u_up_vector;\n#ifdef PROJECTION_GLOBE_VIEW\nuniform vec3 u_tile_id;uniform mat4 u_inv_rot_matrix;uniform vec2 u_merc_center;uniform vec3 u_camera_forward;uniform float u_zoom_transition;uniform vec3 u_ecef_origin;uniform mat4 u_tile_matrix;\n#endif\nvarying vec2 v_data0;varying vec3 v_data1;\n#pragma mapbox: define highp vec4 fill_color\n#pragma mapbox: define highp vec4 halo_color\n#pragma mapbox: define lowp float opacity\n#pragma mapbox: define lowp float halo_width\n#pragma mapbox: define lowp float halo_blur\nvoid main() {\n#pragma mapbox: initialize highp vec4 fill_color\n#pragma mapbox: initialize highp vec4 halo_color\n#pragma mapbox: initialize lowp float opacity\n#pragma mapbox: initialize lowp float halo_width\n#pragma mapbox: initialize lowp float halo_blur\nvec2 a_pos=a_pos_offset.xy;vec2 a_offset=a_pos_offset.zw;vec2 a_tex=a_tex_size.xy;vec2 a_size=a_tex_size.zw;float a_size_min=floor(a_size[0]*0.5);vec2 a_pxoffset=a_pixeloffset.xy;highp float segment_angle=-a_projected_pos[3];float size;if (!u_is_size_zoom_constant && !u_is_size_feature_constant) {size=mix(a_size_min,a_size[1],u_size_t)/128.0;} else if (u_is_size_zoom_constant && !u_is_size_feature_constant) {size=a_size_min/128.0;} else {size=u_size;}vec2 tile_anchor=a_pos;vec3 h=elevationVector(tile_anchor)*elevation(tile_anchor);\n#ifdef PROJECTION_GLOBE_VIEW\nvec3 mercator_pos=mercator_tile_position(u_inv_rot_matrix,tile_anchor,u_tile_id,u_merc_center);vec3 world_pos=mix_globe_mercator(a_globe_anchor+h,mercator_pos,u_zoom_transition);vec4 ecef_point=u_tile_matrix*vec4(world_pos,1.0);vec3 origin_to_point=ecef_point.xyz-u_ecef_origin;float globe_occlusion_fade=dot(origin_to_point,u_camera_forward) >=0.0 ? 0.0 : 1.0;\n#else\nvec3 world_pos=vec3(tile_anchor,0)+h;float globe_occlusion_fade=1.0;\n#endif\nvec4 projected_point=u_matrix*vec4(world_pos,1);highp float camera_to_anchor_distance=projected_point.w;highp float distance_ratio=u_pitch_with_map ?\ncamera_to_anchor_distance/u_camera_to_center_distance :\nu_camera_to_center_distance/camera_to_anchor_distance;highp float perspective_ratio=clamp(\n0.5+0.5*distance_ratio,0.0,1.5);size*=perspective_ratio;float fontScale=u_is_text ? size/24.0 : size;highp float symbol_rotation=0.0;if (u_rotate_symbol) {\n#ifdef PROJECTION_GLOBE_VIEW\nvec3 displacement=vec3(a_globe_normal.z,0,-a_globe_normal.x);vec4 offsetprojected_point=u_matrix*vec4(a_globe_anchor+displacement,1);\n#else\nvec4 offsetprojected_point=u_matrix*vec4(tile_anchor+vec2(1,0),0,1);\n#endif\nvec2 a=projected_point.xy/projected_point.w;vec2 b=offsetprojected_point.xy/offsetprojected_point.w;symbol_rotation=atan((b.y-a.y)/u_aspect_ratio,b.x-a.x);}\n#ifdef PROJECTION_GLOBE_VIEW\nvec3 proj_pos=mix_globe_mercator(a_projected_pos.xyz+h,mercator_pos,u_zoom_transition);vec4 projected_pos=u_label_plane_matrix*vec4(proj_pos,1.0);\n#else\nvec4 projected_pos=u_label_plane_matrix*vec4(a_projected_pos.xy,h.z,1.0);\n#endif\nhighp float angle_sin=sin(segment_angle+symbol_rotation);highp float angle_cos=cos(segment_angle+symbol_rotation);mat2 rotation_matrix=mat2(angle_cos,-1.0*angle_sin,angle_sin,angle_cos);float z=0.0;vec2 offset=rotation_matrix*(a_offset/32.0*fontScale+a_pxoffset);\n#ifdef PITCH_WITH_MAP_TERRAIN\nvec4 tile_pos=u_label_plane_matrix_inv*vec4(a_projected_pos.xy+offset,0.0,1.0);z=elevation(tile_pos.xy);\n#endif\nfloat occlusion_fade=occlusionFade(projected_point)*globe_occlusion_fade;\n#ifdef PROJECTION_GLOBE_VIEW\nvec3 xAxis=u_pitch_with_map ? normalize(cross(a_globe_normal,u_up_vector)) : vec3(1,0,0);vec3 yAxis=u_pitch_with_map ? normalize(cross(a_globe_normal,xAxis)) : vec3(0,1,0);gl_Position=mix(u_coord_matrix*vec4(projected_pos.xyz/projected_pos.w+xAxis*offset.x+yAxis*offset.y,1.0),AWAY,float(projected_point.w <=0.0 || occlusion_fade==0.0));\n#else\ngl_Position=mix(u_coord_matrix*vec4(projected_pos.xy/projected_pos.w+offset,z,1.0),AWAY,float(projected_point.w <=0.0 || occlusion_fade==0.0));\n#endif\nfloat gamma_scale=gl_Position.w;float projection_transition_fade=1.0;\n#if defined(PROJECTED_POS_ON_VIEWPORT) && defined(PROJECTION_GLOBE_VIEW)\nprojection_transition_fade=1.0-step(EPSILON,u_zoom_transition);\n#endif\nvec2 fade_opacity=unpack_opacity(a_fade_opacity);float fade_change=fade_opacity[1] > 0.5 ? u_fade_change :-u_fade_change;float interpolated_fade_opacity=max(0.0,min(occlusion_fade,fade_opacity[0]+fade_change));v_data0=a_tex/u_texsize;v_data1=vec3(gamma_scale,size,interpolated_fade_opacity*projection_transition_fade);}";
+var symbolSDFVert = "attribute vec4 a_pos_offset;\r\nattribute vec4 a_tex_size;\r\nattribute vec4 a_pixeloffset;\r\nattribute vec4 a_projected_pos;\r\nattribute float a_fade_opacity;\r\n#ifdef PROJECTION_GLOBE_VIEW\r\nattribute vec3 a_globe_anchor;\r\nattribute vec3 a_globe_normal;\r\n#endif\nuniform bool u_is_size_zoom_constant;\r\nuniform bool u_is_size_feature_constant;\r\nuniform highp float u_size_t;uniform highp float u_size;uniform mat4 u_matrix;\r\nuniform mat4 u_label_plane_matrix;\r\nuniform mat4 u_coord_matrix;\r\nuniform bool u_is_text;\r\nuniform bool u_pitch_with_map;\r\nuniform bool u_rotate_symbol;\r\nuniform highp float u_aspect_ratio;\r\nuniform highp float u_camera_to_center_distance;\r\nuniform float u_fade_change;\r\nuniform vec2 u_texsize;\r\nuniform vec3 u_up_vector;\r\n#ifdef PROJECTION_GLOBE_VIEW\r\nuniform vec3 u_tile_id;\r\nuniform mat4 u_inv_rot_matrix;\r\nuniform vec2 u_merc_center;\r\nuniform vec3 u_camera_forward;\r\nuniform float u_zoom_transition;\r\nuniform vec3 u_ecef_origin;\r\nuniform mat4 u_tile_matrix;\r\n#endif\r\nvarying vec2 v_data0;\r\nvarying vec3 v_data1;\r\n#pragma mapbox: define highp vec4 fill_color\r\n#pragma mapbox: define highp vec4 halo_color\r\n#pragma mapbox: define lowp float opacity\r\n#pragma mapbox: define lowp float halo_width\r\n#pragma mapbox: define lowp float halo_blur\r\nvoid main() {\r\n#pragma mapbox: initialize highp vec4 fill_color\r\n#pragma mapbox: initialize highp vec4 halo_color\r\n#pragma mapbox: initialize lowp float opacity\r\n#pragma mapbox: initialize lowp float halo_width\r\n#pragma mapbox: initialize lowp float halo_blur\r\nvec2 a_pos=a_pos_offset.xy;\r\nvec2 a_offset=a_pos_offset.zw;\r\nvec2 a_tex=a_tex_size.xy;\r\nvec2 a_size=a_tex_size.zw;\r\nfloat a_size_min=floor(a_size[0]*0.5);\r\nvec2 a_pxoffset=a_pixeloffset.xy;\r\nhighp float segment_angle=-a_projected_pos[3];\r\nfloat size;\r\nif (!u_is_size_zoom_constant && !u_is_size_feature_constant) {\r\nsize=mix(a_size_min,a_size[1],u_size_t)/128.0;\r\n} else if (u_is_size_zoom_constant && !u_is_size_feature_constant) {\r\nsize=a_size_min/128.0;\r\n} else {\r\nsize=u_size;\r\n}\r\nvec2 tile_anchor=a_pos;\r\nvec3 h=elevationVector(tile_anchor)*elevation(tile_anchor);\r\n#ifdef PROJECTION_GLOBE_VIEW\r\nvec3 mercator_pos=mercator_tile_position(u_inv_rot_matrix,tile_anchor,u_tile_id,u_merc_center);\r\nvec3 world_pos=mix_globe_mercator(a_globe_anchor+h,mercator_pos,u_zoom_transition);\r\nvec4 ecef_point=u_tile_matrix*vec4(world_pos,1.0);\r\nvec3 origin_to_point=ecef_point.xyz-u_ecef_origin;float globe_occlusion_fade=dot(origin_to_point,u_camera_forward) >=0.0 ? 0.0 : 1.0;\r\n#else\r\nvec3 world_pos=vec3(tile_anchor,0)+h;\r\nfloat globe_occlusion_fade=1.0;\r\n#endif\r\nvec4 projected_point=u_matrix*vec4(world_pos,1);\r\nhighp float camera_to_anchor_distance=projected_point.w;highp float distance_ratio=u_pitch_with_map ?\r\ncamera_to_anchor_distance/u_camera_to_center_distance :\r\nu_camera_to_center_distance/camera_to_anchor_distance;\r\nhighp float perspective_ratio=clamp(\r\n0.5+0.5*distance_ratio,0.0,1.5);\r\nsize*=perspective_ratio;\r\nfloat fontScale=u_is_text ? size/24.0 : size;\r\nhighp float symbol_rotation=0.0;\r\nif (u_rotate_symbol) {\n#ifdef PROJECTION_GLOBE_VIEW\nvec3 displacement=vec3(a_globe_normal.z,0,-a_globe_normal.x);\r\nvec4 offsetprojected_point=u_matrix*vec4(a_globe_anchor+displacement,1);\r\n#else\r\nvec4 offsetprojected_point=u_matrix*vec4(tile_anchor+vec2(1,0),0,1);\r\n#endif\r\nvec2 a=projected_point.xy/projected_point.w;\r\nvec2 b=offsetprojected_point.xy/offsetprojected_point.w;\r\nsymbol_rotation=atan((b.y-a.y)/u_aspect_ratio,b.x-a.x);\r\n}\r\n#ifdef PROJECTION_GLOBE_VIEW\r\nvec3 proj_pos=mix_globe_mercator(a_projected_pos.xyz+h,mercator_pos,u_zoom_transition);\r\nvec4 projected_pos=u_label_plane_matrix*vec4(proj_pos,1.0);\r\n#else\r\nvec4 projected_pos=u_label_plane_matrix*vec4(a_projected_pos.xy,h.z,1.0);\r\n#endif\r\nhighp float angle_sin=sin(segment_angle+symbol_rotation);\r\nhighp float angle_cos=cos(segment_angle+symbol_rotation);\r\nmat2 rotation_matrix=mat2(angle_cos,-1.0*angle_sin,angle_sin,angle_cos);\r\nfloat z=0.0;\r\nvec2 offset=rotation_matrix*(a_offset/32.0*fontScale+a_pxoffset);\r\n#ifdef PITCH_WITH_MAP_TERRAIN\r\nvec4 tile_pos=u_label_plane_matrix_inv*vec4(a_projected_pos.xy+offset,0.0,1.0);\r\nz=elevation(tile_pos.xy);\r\n#endif\nfloat occlusion_fade=occlusionFade(projected_point)*globe_occlusion_fade;\r\n#ifdef PROJECTION_GLOBE_VIEW\nvec3 xAxis=u_pitch_with_map ? normalize(cross(a_globe_normal,u_up_vector)) : vec3(1,0,0);\r\nvec3 yAxis=u_pitch_with_map ? normalize(cross(a_globe_normal,xAxis)) : vec3(0,1,0);\r\ngl_Position=mix(u_coord_matrix*vec4(projected_pos.xyz/projected_pos.w+xAxis*offset.x+yAxis*offset.y,1.0),AWAY,float(projected_point.w <=0.0 || occlusion_fade==0.0));\r\n#else\r\ngl_Position=mix(u_coord_matrix*vec4(projected_pos.xy/projected_pos.w+offset,z,1.0),AWAY,float(projected_point.w <=0.0 || occlusion_fade==0.0));\r\n#endif\r\nfloat gamma_scale=gl_Position.w;\r\nfloat projection_transition_fade=1.0;\r\n#if defined(PROJECTED_POS_ON_VIEWPORT) && defined(PROJECTION_GLOBE_VIEW)\r\nprojection_transition_fade=1.0-step(EPSILON,u_zoom_transition);\r\n#endif\r\nvec2 fade_opacity=unpack_opacity(a_fade_opacity);\r\nfloat fade_change=fade_opacity[1] > 0.5 ? u_fade_change :-u_fade_change;\r\nfloat interpolated_fade_opacity=max(0.0,min(occlusion_fade,fade_opacity[0]+fade_change));\r\nv_data0=a_tex/u_texsize;\r\nv_data1=vec3(gamma_scale,size,interpolated_fade_opacity*projection_transition_fade);\r\n}";
 
-var symbolTextAndIconFrag = "#define SDF_PX 8.0\n#define SDF 1.0\n#define ICON 0.0\nuniform bool u_is_halo;uniform sampler2D u_texture;uniform sampler2D u_texture_icon;uniform highp float u_gamma_scale;uniform lowp float u_device_pixel_ratio;varying vec4 v_data0;varying vec4 v_data1;\n#pragma mapbox: define highp vec4 fill_color\n#pragma mapbox: define highp vec4 halo_color\n#pragma mapbox: define lowp float opacity\n#pragma mapbox: define lowp float halo_width\n#pragma mapbox: define lowp float halo_blur\nvoid main() {\n#pragma mapbox: initialize highp vec4 fill_color\n#pragma mapbox: initialize highp vec4 halo_color\n#pragma mapbox: initialize lowp float opacity\n#pragma mapbox: initialize lowp float halo_width\n#pragma mapbox: initialize lowp float halo_blur\nfloat fade_opacity=v_data1[2];if (v_data1.w==ICON) {vec2 tex_icon=v_data0.zw;lowp float alpha=opacity*fade_opacity;gl_FragColor=texture2D(u_texture_icon,tex_icon)*alpha;\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\nreturn;}vec2 tex=v_data0.xy;float EDGE_GAMMA=0.105/u_device_pixel_ratio;float gamma_scale=v_data1.x;float size=v_data1.y;float fontScale=size/24.0;lowp vec4 color=fill_color;highp float gamma=EDGE_GAMMA/(fontScale*u_gamma_scale);lowp float buff=(256.0-64.0)/256.0;if (u_is_halo) {color=halo_color;gamma=(halo_blur*1.19/SDF_PX+EDGE_GAMMA)/(fontScale*u_gamma_scale);buff=(6.0-halo_width/fontScale)/SDF_PX;}lowp float dist=texture2D(u_texture,tex).a;highp float gamma_scaled=gamma*gamma_scale;highp float alpha=smoothstep(buff-gamma_scaled,buff+gamma_scaled,dist);gl_FragColor=color*(alpha*opacity*fade_opacity);\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}";
+var symbolTextAndIconFrag = "#define SDF_PX 8.0\r\n#define SDF 1.0\r\n#define ICON 0.0\r\nuniform bool u_is_halo;\r\nuniform sampler2D u_texture;\r\nuniform sampler2D u_texture_icon;\r\nuniform highp float u_gamma_scale;\r\nuniform lowp float u_device_pixel_ratio;\r\nvarying vec4 v_data0;\r\nvarying vec4 v_data1;\r\n#pragma mapbox: define highp vec4 fill_color\r\n#pragma mapbox: define highp vec4 halo_color\r\n#pragma mapbox: define lowp float opacity\r\n#pragma mapbox: define lowp float halo_width\r\n#pragma mapbox: define lowp float halo_blur\r\nvoid main() {\r\n#pragma mapbox: initialize highp vec4 fill_color\r\n#pragma mapbox: initialize highp vec4 halo_color\r\n#pragma mapbox: initialize lowp float opacity\r\n#pragma mapbox: initialize lowp float halo_width\r\n#pragma mapbox: initialize lowp float halo_blur\r\nfloat fade_opacity=v_data1[2];\r\nif (v_data1.w==ICON) {\r\nvec2 tex_icon=v_data0.zw;\r\nlowp float alpha=opacity*fade_opacity;\r\ngl_FragColor=texture2D(u_texture_icon,tex_icon)*alpha;\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\nreturn;\r\n}\r\nvec2 tex=v_data0.xy;\r\nfloat EDGE_GAMMA=0.105/u_device_pixel_ratio;\r\nfloat gamma_scale=v_data1.x;\r\nfloat size=v_data1.y;\r\nfloat fontScale=size/24.0;\r\nlowp vec4 color=fill_color;\r\nhighp float gamma=EDGE_GAMMA/(fontScale*u_gamma_scale);\r\nlowp float buff=(256.0-64.0)/256.0;\r\nif (u_is_halo) {\r\ncolor=halo_color;\r\ngamma=(halo_blur*1.19/SDF_PX+EDGE_GAMMA)/(fontScale*u_gamma_scale);\r\nbuff=(6.0-halo_width/fontScale)/SDF_PX;\r\n}\r\nlowp float dist=texture2D(u_texture,tex).a;\r\nhighp float gamma_scaled=gamma*gamma_scale;\r\nhighp float alpha=smoothstep(buff-gamma_scaled,buff+gamma_scaled,dist);\r\ngl_FragColor=color*(alpha*opacity*fade_opacity);\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\n}";
 
-var symbolTextAndIconVert = "attribute vec4 a_pos_offset;attribute vec4 a_tex_size;attribute vec4 a_projected_pos;attribute float a_fade_opacity;\n#ifdef PROJECTION_GLOBE_VIEW\nattribute vec3 a_globe_anchor;attribute vec3 a_globe_normal;\n#endif\nuniform bool u_is_size_zoom_constant;uniform bool u_is_size_feature_constant;uniform highp float u_size_t;uniform highp float u_size;uniform mat4 u_matrix;uniform mat4 u_label_plane_matrix;uniform mat4 u_coord_matrix;uniform bool u_is_text;uniform bool u_pitch_with_map;uniform bool u_rotate_symbol;uniform highp float u_aspect_ratio;uniform highp float u_camera_to_center_distance;uniform float u_fade_change;uniform vec2 u_texsize;uniform vec3 u_up_vector;uniform vec2 u_texsize_icon;\n#ifdef PROJECTION_GLOBE_VIEW\nuniform vec3 u_tile_id;uniform mat4 u_inv_rot_matrix;uniform vec2 u_merc_center;uniform vec3 u_camera_forward;uniform float u_zoom_transition;uniform vec3 u_ecef_origin;uniform mat4 u_tile_matrix;\n#endif\nvarying vec4 v_data0;varying vec4 v_data1;\n#pragma mapbox: define highp vec4 fill_color\n#pragma mapbox: define highp vec4 halo_color\n#pragma mapbox: define lowp float opacity\n#pragma mapbox: define lowp float halo_width\n#pragma mapbox: define lowp float halo_blur\nvoid main() {\n#pragma mapbox: initialize highp vec4 fill_color\n#pragma mapbox: initialize highp vec4 halo_color\n#pragma mapbox: initialize lowp float opacity\n#pragma mapbox: initialize lowp float halo_width\n#pragma mapbox: initialize lowp float halo_blur\nvec2 a_pos=a_pos_offset.xy;vec2 a_offset=a_pos_offset.zw;vec2 a_tex=a_tex_size.xy;vec2 a_size=a_tex_size.zw;float a_size_min=floor(a_size[0]*0.5);float is_sdf=a_size[0]-2.0*a_size_min;highp float segment_angle=-a_projected_pos[3];float size;if (!u_is_size_zoom_constant && !u_is_size_feature_constant) {size=mix(a_size_min,a_size[1],u_size_t)/128.0;} else if (u_is_size_zoom_constant && !u_is_size_feature_constant) {size=a_size_min/128.0;} else {size=u_size;}vec2 tile_anchor=a_pos;vec3 h=elevationVector(tile_anchor)*elevation(tile_anchor);\n#ifdef PROJECTION_GLOBE_VIEW\nvec3 mercator_pos=mercator_tile_position(u_inv_rot_matrix,tile_anchor,u_tile_id,u_merc_center);vec3 world_pos=mix_globe_mercator(a_globe_anchor+h,mercator_pos,u_zoom_transition);vec4 ecef_point=u_tile_matrix*vec4(world_pos,1.0);vec3 origin_to_point=ecef_point.xyz-u_ecef_origin;float globe_occlusion_fade=dot(origin_to_point,u_camera_forward) >=0.0 ? 0.0 : 1.0;\n#else\nvec3 world_pos=vec3(tile_anchor,0)+h;float globe_occlusion_fade=1.0;\n#endif\nvec4 projected_point=u_matrix*vec4(world_pos,1);highp float camera_to_anchor_distance=projected_point.w;highp float distance_ratio=u_pitch_with_map ?\ncamera_to_anchor_distance/u_camera_to_center_distance :\nu_camera_to_center_distance/camera_to_anchor_distance;highp float perspective_ratio=clamp(\n0.5+0.5*distance_ratio,0.0,1.5);size*=perspective_ratio;float font_scale=size/24.0;highp float symbol_rotation=0.0;if (u_rotate_symbol) {vec4 offset_projected_point=u_matrix*vec4(a_pos+vec2(1,0),0,1);vec2 a=projected_point.xy/projected_point.w;vec2 b=offset_projected_point.xy/offset_projected_point.w;symbol_rotation=atan((b.y-a.y)/u_aspect_ratio,b.x-a.x);}\n#ifdef PROJECTION_GLOBE_VIEW\nvec3 proj_pos=mix_globe_mercator(a_projected_pos.xyz+h,mercator_pos,u_zoom_transition);vec4 projected_pos=u_label_plane_matrix*vec4(proj_pos,1.0);\n#else\nvec4 projected_pos=u_label_plane_matrix*vec4(a_projected_pos.xy,h.z,1.0);\n#endif\nhighp float angle_sin=sin(segment_angle+symbol_rotation);highp float angle_cos=cos(segment_angle+symbol_rotation);mat2 rotation_matrix=mat2(angle_cos,-1.0*angle_sin,angle_sin,angle_cos);float z=0.0;vec2 offset=rotation_matrix*(a_offset/32.0*font_scale);\n#ifdef PITCH_WITH_MAP_TERRAIN\nvec4 tile_pos=u_label_plane_matrix_inv*vec4(a_projected_pos.xy+offset,0.0,1.0);z=elevation(tile_pos.xy);\n#endif\nfloat occlusion_fade=occlusionFade(projected_point)*globe_occlusion_fade;\n#ifdef PROJECTION_GLOBE_VIEW\nvec3 xAxis=u_pitch_with_map ? normalize(cross(a_globe_normal,u_up_vector)) : vec3(1,0,0);vec3 yAxis=u_pitch_with_map ? normalize(cross(a_globe_normal,xAxis)) : vec3(0,1,0);gl_Position=mix(u_coord_matrix*vec4(projected_pos.xyz/projected_pos.w+xAxis*offset.x+yAxis*offset.y,1.0),AWAY,float(projected_point.w <=0.0 || occlusion_fade==0.0));\n#else\ngl_Position=mix(u_coord_matrix*vec4(projected_pos.xy/projected_pos.w+offset,z,1.0),AWAY,float(projected_point.w <=0.0 || occlusion_fade==0.0));\n#endif\nfloat gamma_scale=gl_Position.w;vec2 fade_opacity=unpack_opacity(a_fade_opacity);float fade_change=fade_opacity[1] > 0.5 ? u_fade_change :-u_fade_change;float interpolated_fade_opacity=max(0.0,min(occlusion_fade,fade_opacity[0]+fade_change));float projection_transition_fade=1.0;\n#if defined(PROJECTED_POS_ON_VIEWPORT) && defined(PROJECTION_GLOBE_VIEW)\nprojection_transition_fade=1.0-step(EPSILON,u_zoom_transition);\n#endif\nv_data0.xy=a_tex/u_texsize;v_data0.zw=a_tex/u_texsize_icon;v_data1=vec4(gamma_scale,size,interpolated_fade_opacity*projection_transition_fade,is_sdf);}";
+var symbolTextAndIconVert = "attribute vec4 a_pos_offset;\r\nattribute vec4 a_tex_size;\r\nattribute vec4 a_projected_pos;\r\nattribute float a_fade_opacity;\r\n#ifdef PROJECTION_GLOBE_VIEW\r\nattribute vec3 a_globe_anchor;\r\nattribute vec3 a_globe_normal;\r\n#endif\nuniform bool u_is_size_zoom_constant;\r\nuniform bool u_is_size_feature_constant;\r\nuniform highp float u_size_t;uniform highp float u_size;uniform mat4 u_matrix;\r\nuniform mat4 u_label_plane_matrix;\r\nuniform mat4 u_coord_matrix;\r\nuniform bool u_is_text;\r\nuniform bool u_pitch_with_map;\r\nuniform bool u_rotate_symbol;\r\nuniform highp float u_aspect_ratio;\r\nuniform highp float u_camera_to_center_distance;\r\nuniform float u_fade_change;\r\nuniform vec2 u_texsize;\r\nuniform vec3 u_up_vector;\r\nuniform vec2 u_texsize_icon;\r\n#ifdef PROJECTION_GLOBE_VIEW\r\nuniform vec3 u_tile_id;\r\nuniform mat4 u_inv_rot_matrix;\r\nuniform vec2 u_merc_center;\r\nuniform vec3 u_camera_forward;\r\nuniform float u_zoom_transition;\r\nuniform vec3 u_ecef_origin;\r\nuniform mat4 u_tile_matrix;\r\n#endif\r\nvarying vec4 v_data0;\r\nvarying vec4 v_data1;\r\n#pragma mapbox: define highp vec4 fill_color\r\n#pragma mapbox: define highp vec4 halo_color\r\n#pragma mapbox: define lowp float opacity\r\n#pragma mapbox: define lowp float halo_width\r\n#pragma mapbox: define lowp float halo_blur\r\nvoid main() {\r\n#pragma mapbox: initialize highp vec4 fill_color\r\n#pragma mapbox: initialize highp vec4 halo_color\r\n#pragma mapbox: initialize lowp float opacity\r\n#pragma mapbox: initialize lowp float halo_width\r\n#pragma mapbox: initialize lowp float halo_blur\r\nvec2 a_pos=a_pos_offset.xy;\r\nvec2 a_offset=a_pos_offset.zw;\r\nvec2 a_tex=a_tex_size.xy;\r\nvec2 a_size=a_tex_size.zw;\r\nfloat a_size_min=floor(a_size[0]*0.5);\r\nfloat is_sdf=a_size[0]-2.0*a_size_min;\r\nhighp float segment_angle=-a_projected_pos[3];\r\nfloat size;\r\nif (!u_is_size_zoom_constant && !u_is_size_feature_constant) {\r\nsize=mix(a_size_min,a_size[1],u_size_t)/128.0;\r\n} else if (u_is_size_zoom_constant && !u_is_size_feature_constant) {\r\nsize=a_size_min/128.0;\r\n} else {\r\nsize=u_size;\r\n}\r\nvec2 tile_anchor=a_pos;\r\nvec3 h=elevationVector(tile_anchor)*elevation(tile_anchor);\r\n#ifdef PROJECTION_GLOBE_VIEW\r\nvec3 mercator_pos=mercator_tile_position(u_inv_rot_matrix,tile_anchor,u_tile_id,u_merc_center);\r\nvec3 world_pos=mix_globe_mercator(a_globe_anchor+h,mercator_pos,u_zoom_transition);\r\nvec4 ecef_point=u_tile_matrix*vec4(world_pos,1.0);\r\nvec3 origin_to_point=ecef_point.xyz-u_ecef_origin;float globe_occlusion_fade=dot(origin_to_point,u_camera_forward) >=0.0 ? 0.0 : 1.0;\r\n#else\r\nvec3 world_pos=vec3(tile_anchor,0)+h;\r\nfloat globe_occlusion_fade=1.0;\r\n#endif\r\nvec4 projected_point=u_matrix*vec4(world_pos,1);\r\nhighp float camera_to_anchor_distance=projected_point.w;highp float distance_ratio=u_pitch_with_map ?\r\ncamera_to_anchor_distance/u_camera_to_center_distance :\r\nu_camera_to_center_distance/camera_to_anchor_distance;\r\nhighp float perspective_ratio=clamp(\r\n0.5+0.5*distance_ratio,0.0,1.5);\r\nsize*=perspective_ratio;\r\nfloat font_scale=size/24.0;\r\nhighp float symbol_rotation=0.0;\r\nif (u_rotate_symbol) {vec4 offset_projected_point=u_matrix*vec4(a_pos+vec2(1,0),0,1);\r\nvec2 a=projected_point.xy/projected_point.w;\r\nvec2 b=offset_projected_point.xy/offset_projected_point.w;\r\nsymbol_rotation=atan((b.y-a.y)/u_aspect_ratio,b.x-a.x);\r\n}\r\n#ifdef PROJECTION_GLOBE_VIEW\r\nvec3 proj_pos=mix_globe_mercator(a_projected_pos.xyz+h,mercator_pos,u_zoom_transition);\r\nvec4 projected_pos=u_label_plane_matrix*vec4(proj_pos,1.0);\r\n#else\r\nvec4 projected_pos=u_label_plane_matrix*vec4(a_projected_pos.xy,h.z,1.0);\r\n#endif\r\nhighp float angle_sin=sin(segment_angle+symbol_rotation);\r\nhighp float angle_cos=cos(segment_angle+symbol_rotation);\r\nmat2 rotation_matrix=mat2(angle_cos,-1.0*angle_sin,angle_sin,angle_cos);\r\nfloat z=0.0;\r\nvec2 offset=rotation_matrix*(a_offset/32.0*font_scale);\r\n#ifdef PITCH_WITH_MAP_TERRAIN\r\nvec4 tile_pos=u_label_plane_matrix_inv*vec4(a_projected_pos.xy+offset,0.0,1.0);\r\nz=elevation(tile_pos.xy);\r\n#endif\r\nfloat occlusion_fade=occlusionFade(projected_point)*globe_occlusion_fade;\r\n#ifdef PROJECTION_GLOBE_VIEW\nvec3 xAxis=u_pitch_with_map ? normalize(cross(a_globe_normal,u_up_vector)) : vec3(1,0,0);\r\nvec3 yAxis=u_pitch_with_map ? normalize(cross(a_globe_normal,xAxis)) : vec3(0,1,0);\r\ngl_Position=mix(u_coord_matrix*vec4(projected_pos.xyz/projected_pos.w+xAxis*offset.x+yAxis*offset.y,1.0),AWAY,float(projected_point.w <=0.0 || occlusion_fade==0.0));\r\n#else\r\ngl_Position=mix(u_coord_matrix*vec4(projected_pos.xy/projected_pos.w+offset,z,1.0),AWAY,float(projected_point.w <=0.0 || occlusion_fade==0.0));\r\n#endif\r\nfloat gamma_scale=gl_Position.w;\r\nvec2 fade_opacity=unpack_opacity(a_fade_opacity);\r\nfloat fade_change=fade_opacity[1] > 0.5 ? u_fade_change :-u_fade_change;\r\nfloat interpolated_fade_opacity=max(0.0,min(occlusion_fade,fade_opacity[0]+fade_change));\r\nfloat projection_transition_fade=1.0;\r\n#if defined(PROJECTED_POS_ON_VIEWPORT) && defined(PROJECTION_GLOBE_VIEW)\r\nprojection_transition_fade=1.0-step(EPSILON,u_zoom_transition);\r\n#endif\r\nv_data0.xy=a_tex/u_texsize;\r\nv_data0.zw=a_tex/u_texsize_icon;\r\nv_data1=vec4(gamma_scale,size,interpolated_fade_opacity*projection_transition_fade,is_sdf);\r\n}";
 
-var skyboxFrag = "\nvarying lowp vec3 v_uv;uniform lowp samplerCube u_cubemap;uniform lowp float u_opacity;uniform highp float u_temporal_offset;uniform highp vec3 u_sun_direction;float sun_disk(highp vec3 ray_direction,highp vec3 sun_direction) {highp float cos_angle=dot(normalize(ray_direction),sun_direction);const highp float cos_sun_angular_diameter=0.99996192306;const highp float smoothstep_delta=1e-5;return smoothstep(\ncos_sun_angular_diameter-smoothstep_delta,cos_sun_angular_diameter+smoothstep_delta,cos_angle);}float map(float value,float start,float end,float new_start,float new_end) {return ((value-start)*(new_end-new_start))/(end-start)+new_start;}void main() {vec3 uv=v_uv;const float y_bias=0.015;uv.y+=y_bias;uv.y=pow(abs(uv.y),1.0/5.0);uv.y=map(uv.y,0.0,1.0,-1.0,1.0);vec3 sky_color=textureCube(u_cubemap,uv).rgb;\n#ifdef FOG\nsky_color=fog_apply_sky_gradient(v_uv.xzy,sky_color);\n#endif\nsky_color.rgb=dither(sky_color.rgb,gl_FragCoord.xy+u_temporal_offset);sky_color+=0.1*sun_disk(v_uv,u_sun_direction);gl_FragColor=vec4(sky_color*u_opacity,u_opacity);\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}";
+var skyboxFrag = "\nvarying lowp vec3 v_uv;\r\nuniform lowp samplerCube u_cubemap;\r\nuniform lowp float u_opacity;\r\nuniform highp float u_temporal_offset;\r\nuniform highp vec3 u_sun_direction;\r\nfloat sun_disk(highp vec3 ray_direction,highp vec3 sun_direction) {\r\nhighp float cos_angle=dot(normalize(ray_direction),sun_direction);const highp float cos_sun_angular_diameter=0.99996192306;\r\nconst highp float smoothstep_delta=1e-5;\r\nreturn smoothstep(\r\ncos_sun_angular_diameter-smoothstep_delta,cos_sun_angular_diameter+smoothstep_delta,cos_angle);\r\n}\r\nfloat map(float value,float start,float end,float new_start,float new_end) {\r\nreturn ((value-start)*(new_end-new_start))/(end-start)+new_start;\r\n}\r\nvoid main() {\r\nvec3 uv=v_uv;const float y_bias=0.015;\r\nuv.y+=y_bias;uv.y=pow(abs(uv.y),1.0/5.0);uv.y=map(uv.y,0.0,1.0,-1.0,1.0);\r\nvec3 sky_color=textureCube(u_cubemap,uv).rgb;\r\n#ifdef FOG\nsky_color=fog_apply_sky_gradient(v_uv.xzy,sky_color);\r\n#endif\nsky_color.rgb=dither(sky_color.rgb,gl_FragCoord.xy+u_temporal_offset);sky_color+=0.1*sun_disk(v_uv,u_sun_direction);\r\ngl_FragColor=vec4(sky_color*u_opacity,u_opacity);\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\n}";
 
-var skyboxGradientFrag = "varying highp vec3 v_uv;uniform lowp sampler2D u_color_ramp;uniform highp vec3 u_center_direction;uniform lowp float u_radius;uniform lowp float u_opacity;uniform highp float u_temporal_offset;void main() {float progress=acos(dot(normalize(v_uv),u_center_direction))/u_radius;vec4 color=texture2D(u_color_ramp,vec2(progress,0.5));\n#ifdef FOG\ncolor.rgb=fog_apply_sky_gradient(v_uv.xzy,color.rgb/color.a)*color.a;\n#endif\ncolor*=u_opacity;color.rgb=dither(color.rgb,gl_FragCoord.xy+u_temporal_offset);gl_FragColor=color;\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}";
+var skyboxGradientFrag = "varying highp vec3 v_uv;\r\nuniform lowp sampler2D u_color_ramp;\r\nuniform highp vec3 u_center_direction;\r\nuniform lowp float u_radius;\r\nuniform lowp float u_opacity;\r\nuniform highp float u_temporal_offset;\r\nvoid main() {\r\nfloat progress=acos(dot(normalize(v_uv),u_center_direction))/u_radius;\r\nvec4 color=texture2D(u_color_ramp,vec2(progress,0.5));\r\n#ifdef FOG\ncolor.rgb=fog_apply_sky_gradient(v_uv.xzy,color.rgb/color.a)*color.a;\r\n#endif\r\ncolor*=u_opacity;color.rgb=dither(color.rgb,gl_FragCoord.xy+u_temporal_offset);\r\ngl_FragColor=color;\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\n}";
 
-var skyboxVert = "attribute highp vec3 a_pos_3f;uniform lowp mat4 u_matrix;varying highp vec3 v_uv;void main() {const mat3 half_neg_pi_around_x=mat3(1.0,0.0, 0.0,0.0,0.0,-1.0,0.0,1.0, 0.0);v_uv=half_neg_pi_around_x*a_pos_3f;vec4 pos=u_matrix*vec4(a_pos_3f,1.0);gl_Position=pos.xyww;}";
+var skyboxVert = "attribute highp vec3 a_pos_3f;\r\nuniform lowp mat4 u_matrix;\r\nvarying highp vec3 v_uv;\r\nvoid main() {\r\nconst mat3 half_neg_pi_around_x=mat3(1.0,0.0, 0.0,0.0,0.0,-1.0,0.0,1.0, 0.0);\r\nv_uv=half_neg_pi_around_x*a_pos_3f;\r\nvec4 pos=u_matrix*vec4(a_pos_3f,1.0);gl_Position=pos.xyww;\r\n}";
 
-var terrainRasterFrag = "uniform sampler2D u_image0;varying vec2 v_pos0;\n#ifdef FOG\nvarying float v_fog_opacity;\n#endif\nvoid main() {vec4 color=texture2D(u_image0,v_pos0);\n#ifdef FOG\ncolor=fog_dither(fog_apply_from_vert(color,v_fog_opacity));\n#endif\ngl_FragColor=color;\n#ifdef TERRAIN_WIREFRAME\ngl_FragColor=vec4(1.0,0.0,0.0,0.8);\n#endif\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}";
+var terrainRasterFrag = "uniform sampler2D u_image0;\r\nvarying vec2 v_pos0;\r\n#ifdef FOG\r\nvarying float v_fog_opacity;\r\n#endif\r\nvoid main() {\r\nvec4 color=texture2D(u_image0,v_pos0);\r\n#ifdef FOG\r\ncolor=fog_dither(fog_apply_from_vert(color,v_fog_opacity));\r\n#endif\r\ngl_FragColor=color;\r\n#ifdef TERRAIN_WIREFRAME\r\ngl_FragColor=vec4(1.0,0.0,0.0,0.8);\r\n#endif\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\n}";
 
-var terrainRasterVert = "uniform mat4 u_matrix;uniform float u_skirt_height;attribute vec2 a_pos;attribute vec2 a_texture_pos;varying vec2 v_pos0;\n#ifdef FOG\nvarying float v_fog_opacity;\n#endif\nconst float skirtOffset=24575.0;const float wireframeOffset=0.00015;void main() {v_pos0=a_texture_pos/8192.0;float skirt=float(a_pos.x >=skirtOffset);float elevation=elevation(a_texture_pos)-skirt*u_skirt_height;\n#ifdef TERRAIN_WIREFRAME\nelevation+=u_skirt_height*u_skirt_height*wireframeOffset;\n#endif\nvec2 decodedPos=a_pos-vec2(skirt*skirtOffset,0.0);gl_Position=u_matrix*vec4(decodedPos,elevation,1.0);\n#ifdef FOG\nv_fog_opacity=fog(fog_position(vec3(decodedPos,elevation)));\n#endif\n}";
+var terrainRasterVert = "uniform mat4 u_matrix;\r\nuniform float u_skirt_height;\r\nattribute vec2 a_pos;\r\nattribute vec2 a_texture_pos;\r\nvarying vec2 v_pos0;\r\n#ifdef FOG\r\nvarying float v_fog_opacity;\r\n#endif\r\nconst float skirtOffset=24575.0;\r\nconst float wireframeOffset=0.00015;\r\nvoid main() {\r\nv_pos0=a_texture_pos/8192.0;\r\nfloat skirt=float(a_pos.x >=skirtOffset);\r\nfloat elevation=elevation(a_texture_pos)-skirt*u_skirt_height;\r\n#ifdef TERRAIN_WIREFRAME\r\nelevation+=u_skirt_height*u_skirt_height*wireframeOffset;\r\n#endif\r\nvec2 decodedPos=a_pos-vec2(skirt*skirtOffset,0.0);\r\ngl_Position=u_matrix*vec4(decodedPos,elevation,1.0);\r\n#ifdef FOG\r\nv_fog_opacity=fog(fog_position(vec3(decodedPos,elevation)));\r\n#endif\r\n}";
 
-var terrainDepthFrag = "#ifdef GL_ES\nprecision highp float;\n#endif\nvarying float v_depth;void main() {gl_FragColor=pack_depth(v_depth);}";
+var terrainDepthFrag = "#ifdef GL_ES\r\nprecision highp float;\r\n#endif\r\nvarying float v_depth;\r\nvoid main() {\r\ngl_FragColor=pack_depth(v_depth);\r\n}";
 
-var terrainDepthVert = "uniform mat4 u_matrix;attribute vec2 a_pos;attribute vec2 a_texture_pos;varying float v_depth;void main() {float elevation=elevation(a_texture_pos);gl_Position=u_matrix*vec4(a_pos,elevation,1.0);v_depth=gl_Position.z/gl_Position.w;}";
+var terrainDepthVert = "uniform mat4 u_matrix;\r\nattribute vec2 a_pos;\r\nattribute vec2 a_texture_pos;\r\nvarying float v_depth;\r\nvoid main() {\r\nfloat elevation=elevation(a_texture_pos);\r\ngl_Position=u_matrix*vec4(a_pos,elevation,1.0);\r\nv_depth=gl_Position.z/gl_Position.w;\r\n}";
 
-var preludeTerrainVert = "\n#define ELEVATION_SCALE 7.0\n#define ELEVATION_OFFSET 450.0\n#ifdef PROJECTION_GLOBE_VIEW\nuniform vec3 u_tile_tl_up;uniform vec3 u_tile_tr_up;uniform vec3 u_tile_br_up;uniform vec3 u_tile_bl_up;uniform float u_tile_up_scale;vec3 elevationVector(vec2 pos) {vec2 uv=pos/EXTENT;vec3 up=normalize(mix(\nmix(u_tile_tl_up,u_tile_tr_up,uv.xxx),mix(u_tile_bl_up,u_tile_br_up,uv.xxx),uv.yyy));return up*u_tile_up_scale;}\n#else\nvec3 elevationVector(vec2 pos) { return vec3(0,0,1); }\n#endif\n#ifdef TERRAIN\n#ifdef TERRAIN_DEM_FLOAT_FORMAT\nuniform highp sampler2D u_dem;uniform highp sampler2D u_dem_prev;\n#else\nuniform sampler2D u_dem;uniform sampler2D u_dem_prev;\n#endif\nuniform vec4 u_dem_unpack;uniform vec2 u_dem_tl;uniform vec2 u_dem_tl_prev;uniform float u_dem_scale;uniform float u_dem_scale_prev;uniform float u_dem_size;uniform float u_dem_lerp;uniform float u_exaggeration;uniform float u_meter_to_dem;uniform mat4 u_label_plane_matrix_inv;uniform sampler2D u_depth;uniform vec2 u_depth_size_inv;vec4 tileUvToDemSample(vec2 uv,float dem_size,float dem_scale,vec2 dem_tl) {vec2 pos=dem_size*(uv*dem_scale+dem_tl)+1.0;vec2 f=fract(pos);return vec4((pos-f+0.5)/(dem_size+2.0),f);}float decodeElevation(vec4 v) {return dot(vec4(v.xyz*255.0,-1.0),u_dem_unpack);}float currentElevation(vec2 apos) {\n#ifdef TERRAIN_DEM_FLOAT_FORMAT\nvec2 pos=(u_dem_size*(apos/8192.0*u_dem_scale+u_dem_tl)+1.5)/(u_dem_size+2.0);return u_exaggeration*texture2D(u_dem,pos).a;\n#else\nfloat dd=1.0/(u_dem_size+2.0);vec4 r=tileUvToDemSample(apos/8192.0,u_dem_size,u_dem_scale,u_dem_tl);vec2 pos=r.xy;vec2 f=r.zw;float tl=decodeElevation(texture2D(u_dem,pos));\n#ifdef TERRAIN_DEM_NEAREST_FILTER\nreturn u_exaggeration*tl;\n#endif\nfloat tr=decodeElevation(texture2D(u_dem,pos+vec2(dd,0.0)));float bl=decodeElevation(texture2D(u_dem,pos+vec2(0.0,dd)));float br=decodeElevation(texture2D(u_dem,pos+vec2(dd,dd)));return u_exaggeration*mix(mix(tl,tr,f.x),mix(bl,br,f.x),f.y);\n#endif\n}float prevElevation(vec2 apos) {\n#ifdef TERRAIN_DEM_FLOAT_FORMAT\nvec2 pos=(u_dem_size*(apos/8192.0*u_dem_scale_prev+u_dem_tl_prev)+1.5)/(u_dem_size+2.0);return u_exaggeration*texture2D(u_dem_prev,pos).a;\n#else\nfloat dd=1.0/(u_dem_size+2.0);vec4 r=tileUvToDemSample(apos/8192.0,u_dem_size,u_dem_scale_prev,u_dem_tl_prev);vec2 pos=r.xy;vec2 f=r.zw;float tl=decodeElevation(texture2D(u_dem_prev,pos));float tr=decodeElevation(texture2D(u_dem_prev,pos+vec2(dd,0.0)));float bl=decodeElevation(texture2D(u_dem_prev,pos+vec2(0.0,dd)));float br=decodeElevation(texture2D(u_dem_prev,pos+vec2(dd,dd)));return u_exaggeration*mix(mix(tl,tr,f.x),mix(bl,br,f.x),f.y);\n#endif\n}\n#ifdef TERRAIN_VERTEX_MORPHING\nfloat elevation(vec2 apos) {float nextElevation=currentElevation(apos);float prevElevation=prevElevation(apos);return mix(prevElevation,nextElevation,u_dem_lerp);}\n#else\nfloat elevation(vec2 apos) {return currentElevation(apos);}\n#endif\nfloat unpack_depth(vec4 rgba_depth)\n{const vec4 bit_shift=vec4(1.0/(256.0*256.0*256.0),1.0/(256.0*256.0),1.0/256.0,1.0);return dot(rgba_depth,bit_shift)*2.0-1.0;}bool isOccluded(vec4 frag) {vec3 coord=frag.xyz/frag.w;float depth=unpack_depth(texture2D(u_depth,(coord.xy+1.0)*0.5));return coord.z > depth+0.0005;}float occlusionFade(vec4 frag) {vec3 coord=frag.xyz/frag.w;vec3 df=vec3(5.0*u_depth_size_inv,0.0);vec2 uv=0.5*coord.xy+0.5;vec4 depth=vec4(\nunpack_depth(texture2D(u_depth,uv-df.xz)),unpack_depth(texture2D(u_depth,uv+df.xz)),unpack_depth(texture2D(u_depth,uv-df.zy)),unpack_depth(texture2D(u_depth,uv+df.zy))\n);return dot(vec4(0.25),vec4(1.0)-clamp(300.0*(vec4(coord.z-0.001)-depth),0.0,1.0));}vec4 fourSample(vec2 pos,vec2 off) {\n#ifdef TERRAIN_DEM_FLOAT_FORMAT\nfloat tl=texture2D(u_dem,pos).a;float tr=texture2D(u_dem,pos+vec2(off.x,0.0)).a;float bl=texture2D(u_dem,pos+vec2(0.0,off.y)).a;float br=texture2D(u_dem,pos+off).a;\n#else\nvec4 demtl=vec4(texture2D(u_dem,pos).xyz*255.0,-1.0);float tl=dot(demtl,u_dem_unpack);vec4 demtr=vec4(texture2D(u_dem,pos+vec2(off.x,0.0)).xyz*255.0,-1.0);float tr=dot(demtr,u_dem_unpack);vec4 dembl=vec4(texture2D(u_dem,pos+vec2(0.0,off.y)).xyz*255.0,-1.0);float bl=dot(dembl,u_dem_unpack);vec4 dembr=vec4(texture2D(u_dem,pos+off).xyz*255.0,-1.0);float br=dot(dembr,u_dem_unpack);\n#endif\nreturn vec4(tl,tr,bl,br);}float flatElevation(vec2 pack) {vec2 apos=floor(pack/8.0);vec2 span=10.0*(pack-apos*8.0);vec2 uvTex=(apos-vec2(1.0,1.0))/8190.0;float size=u_dem_size+2.0;float dd=1.0/size;vec2 pos=u_dem_size*(uvTex*u_dem_scale+u_dem_tl)+1.0;vec2 f=fract(pos);pos=(pos-f+0.5)*dd;vec4 h=fourSample(pos,vec2(dd));float z=mix(mix(h.x,h.y,f.x),mix(h.z,h.w,f.x),f.y);vec2 w=floor(0.5*(span*u_meter_to_dem-1.0));vec2 d=dd*w;vec4 bounds=vec4(d,vec2(1.0)-d);h=fourSample(pos-d,2.0*d+vec2(dd));vec4 diff=abs(h.xzxy-h.ywzw);vec2 slope=min(vec2(0.25),u_meter_to_dem*0.5*(diff.xz+diff.yw)/(2.0*w+vec2(1.0)));vec2 fix=slope*span;float base=z+max(fix.x,fix.y);return u_exaggeration*base;}float elevationFromUint16(float word) {return u_exaggeration*(word/ELEVATION_SCALE-ELEVATION_OFFSET);}\n#else\nfloat elevation(vec2 pos) { return 0.0; }bool isOccluded(vec4 frag) { return false; }float occlusionFade(vec4 frag) { return 1.0; }\n#endif";
+var preludeTerrainVert = "\n#define ELEVATION_SCALE 7.0\r\n#define ELEVATION_OFFSET 450.0\r\n#ifdef PROJECTION_GLOBE_VIEW\r\nuniform vec3 u_tile_tl_up;\r\nuniform vec3 u_tile_tr_up;\r\nuniform vec3 u_tile_br_up;\r\nuniform vec3 u_tile_bl_up;\r\nuniform float u_tile_up_scale;\r\nvec3 elevationVector(vec2 pos) {\r\nvec2 uv=pos/EXTENT;\r\nvec3 up=normalize(mix(\r\nmix(u_tile_tl_up,u_tile_tr_up,uv.xxx),mix(u_tile_bl_up,u_tile_br_up,uv.xxx),uv.yyy));\r\nreturn up*u_tile_up_scale;\r\n}\r\n#else\r\nvec3 elevationVector(vec2 pos) { return vec3(0,0,1); }\r\n#endif\r\n#ifdef TERRAIN\r\n#ifdef TERRAIN_DEM_FLOAT_FORMAT\r\nuniform highp sampler2D u_dem;\r\nuniform highp sampler2D u_dem_prev;\r\n#else\r\nuniform sampler2D u_dem;\r\nuniform sampler2D u_dem_prev;\r\n#endif\r\nuniform vec4 u_dem_unpack;\r\nuniform vec2 u_dem_tl;\r\nuniform vec2 u_dem_tl_prev;\r\nuniform float u_dem_scale;\r\nuniform float u_dem_scale_prev;\r\nuniform float u_dem_size;\r\nuniform float u_dem_lerp;\r\nuniform float u_exaggeration;\r\nuniform float u_meter_to_dem;\r\nuniform mat4 u_label_plane_matrix_inv;\r\nuniform sampler2D u_depth;\r\nuniform vec2 u_depth_size_inv;\r\nvec4 tileUvToDemSample(vec2 uv,float dem_size,float dem_scale,vec2 dem_tl) {\r\nvec2 pos=dem_size*(uv*dem_scale+dem_tl)+1.0;\r\nvec2 f=fract(pos);\r\nreturn vec4((pos-f+0.5)/(dem_size+2.0),f);\r\n}\r\nfloat decodeElevation(vec4 v) {\r\nreturn dot(vec4(v.xyz*255.0,-1.0),u_dem_unpack);\r\n}\r\nfloat currentElevation(vec2 apos) {\r\n#ifdef TERRAIN_DEM_FLOAT_FORMAT\r\nvec2 pos=(u_dem_size*(apos/8192.0*u_dem_scale+u_dem_tl)+1.5)/(u_dem_size+2.0);\r\nreturn u_exaggeration*texture2D(u_dem,pos).a;\r\n#else\r\nfloat dd=1.0/(u_dem_size+2.0);\r\nvec4 r=tileUvToDemSample(apos/8192.0,u_dem_size,u_dem_scale,u_dem_tl);\r\nvec2 pos=r.xy;\r\nvec2 f=r.zw;\r\nfloat tl=decodeElevation(texture2D(u_dem,pos));\r\n#ifdef TERRAIN_DEM_NEAREST_FILTER\r\nreturn u_exaggeration*tl;\r\n#endif\r\nfloat tr=decodeElevation(texture2D(u_dem,pos+vec2(dd,0.0)));\r\nfloat bl=decodeElevation(texture2D(u_dem,pos+vec2(0.0,dd)));\r\nfloat br=decodeElevation(texture2D(u_dem,pos+vec2(dd,dd)));\r\nreturn u_exaggeration*mix(mix(tl,tr,f.x),mix(bl,br,f.x),f.y);\r\n#endif\r\n}\r\nfloat prevElevation(vec2 apos) {\r\n#ifdef TERRAIN_DEM_FLOAT_FORMAT\r\nvec2 pos=(u_dem_size*(apos/8192.0*u_dem_scale_prev+u_dem_tl_prev)+1.5)/(u_dem_size+2.0);\r\nreturn u_exaggeration*texture2D(u_dem_prev,pos).a;\r\n#else\r\nfloat dd=1.0/(u_dem_size+2.0);\r\nvec4 r=tileUvToDemSample(apos/8192.0,u_dem_size,u_dem_scale_prev,u_dem_tl_prev);\r\nvec2 pos=r.xy;\r\nvec2 f=r.zw;\r\nfloat tl=decodeElevation(texture2D(u_dem_prev,pos));\r\nfloat tr=decodeElevation(texture2D(u_dem_prev,pos+vec2(dd,0.0)));\r\nfloat bl=decodeElevation(texture2D(u_dem_prev,pos+vec2(0.0,dd)));\r\nfloat br=decodeElevation(texture2D(u_dem_prev,pos+vec2(dd,dd)));\r\nreturn u_exaggeration*mix(mix(tl,tr,f.x),mix(bl,br,f.x),f.y);\r\n#endif\r\n}\r\n#ifdef TERRAIN_VERTEX_MORPHING\r\nfloat elevation(vec2 apos) {\r\nfloat nextElevation=currentElevation(apos);\r\nfloat prevElevation=prevElevation(apos);\r\nreturn mix(prevElevation,nextElevation,u_dem_lerp);\r\n}\r\n#else\r\nfloat elevation(vec2 apos) {\r\nreturn currentElevation(apos);\r\n}\r\n#endif\nfloat unpack_depth(vec4 rgba_depth)\r\n{\r\nconst vec4 bit_shift=vec4(1.0/(256.0*256.0*256.0),1.0/(256.0*256.0),1.0/256.0,1.0);\r\nreturn dot(rgba_depth,bit_shift)*2.0-1.0;\r\n}\r\nbool isOccluded(vec4 frag) {\r\nvec3 coord=frag.xyz/frag.w;\r\nfloat depth=unpack_depth(texture2D(u_depth,(coord.xy+1.0)*0.5));\r\nreturn coord.z > depth+0.0005;\r\n}\r\nfloat occlusionFade(vec4 frag) {\r\nvec3 coord=frag.xyz/frag.w;\r\nvec3 df=vec3(5.0*u_depth_size_inv,0.0);\r\nvec2 uv=0.5*coord.xy+0.5;\r\nvec4 depth=vec4(\r\nunpack_depth(texture2D(u_depth,uv-df.xz)),unpack_depth(texture2D(u_depth,uv+df.xz)),unpack_depth(texture2D(u_depth,uv-df.zy)),unpack_depth(texture2D(u_depth,uv+df.zy))\r\n);\r\nreturn dot(vec4(0.25),vec4(1.0)-clamp(300.0*(vec4(coord.z-0.001)-depth),0.0,1.0));\r\n}vec4 fourSample(vec2 pos,vec2 off) {\r\n#ifdef TERRAIN_DEM_FLOAT_FORMAT\r\nfloat tl=texture2D(u_dem,pos).a;\r\nfloat tr=texture2D(u_dem,pos+vec2(off.x,0.0)).a;\r\nfloat bl=texture2D(u_dem,pos+vec2(0.0,off.y)).a;\r\nfloat br=texture2D(u_dem,pos+off).a;\r\n#else\r\nvec4 demtl=vec4(texture2D(u_dem,pos).xyz*255.0,-1.0);\r\nfloat tl=dot(demtl,u_dem_unpack);\r\nvec4 demtr=vec4(texture2D(u_dem,pos+vec2(off.x,0.0)).xyz*255.0,-1.0);\r\nfloat tr=dot(demtr,u_dem_unpack);\r\nvec4 dembl=vec4(texture2D(u_dem,pos+vec2(0.0,off.y)).xyz*255.0,-1.0);\r\nfloat bl=dot(dembl,u_dem_unpack);\r\nvec4 dembr=vec4(texture2D(u_dem,pos+off).xyz*255.0,-1.0);\r\nfloat br=dot(dembr,u_dem_unpack);\r\n#endif\r\nreturn vec4(tl,tr,bl,br);\r\n}\r\nfloat flatElevation(vec2 pack) {\r\nvec2 apos=floor(pack/8.0);\r\nvec2 span=10.0*(pack-apos*8.0);\r\nvec2 uvTex=(apos-vec2(1.0,1.0))/8190.0;\r\nfloat size=u_dem_size+2.0;\r\nfloat dd=1.0/size;\r\nvec2 pos=u_dem_size*(uvTex*u_dem_scale+u_dem_tl)+1.0;\r\nvec2 f=fract(pos);\r\npos=(pos-f+0.5)*dd;vec4 h=fourSample(pos,vec2(dd));\r\nfloat z=mix(mix(h.x,h.y,f.x),mix(h.z,h.w,f.x),f.y);\r\nvec2 w=floor(0.5*(span*u_meter_to_dem-1.0));\r\nvec2 d=dd*w;\r\nvec4 bounds=vec4(d,vec2(1.0)-d);h=fourSample(pos-d,2.0*d+vec2(dd));\r\nvec4 diff=abs(h.xzxy-h.ywzw);\r\nvec2 slope=min(vec2(0.25),u_meter_to_dem*0.5*(diff.xz+diff.yw)/(2.0*w+vec2(1.0)));\r\nvec2 fix=slope*span;\r\nfloat base=z+max(fix.x,fix.y);\r\nreturn u_exaggeration*base;\r\n}\r\nfloat elevationFromUint16(float word) {\r\nreturn u_exaggeration*(word/ELEVATION_SCALE-ELEVATION_OFFSET);\r\n}\n#else\r\nfloat elevation(vec2 pos) { return 0.0; }\r\nbool isOccluded(vec4 frag) { return false; }\r\nfloat occlusionFade(vec4 frag) { return 1.0; }\r\n#endif";
 
-var preludeFogVert = "#ifdef FOG\nuniform mediump vec4 u_fog_color;uniform mediump vec2 u_fog_range;uniform mediump float u_fog_horizon_blend;uniform mediump mat4 u_fog_matrix;varying vec3 v_fog_pos;float fog_range(float depth) {return (depth-u_fog_range[0])/(u_fog_range[1]-u_fog_range[0]);}float fog_horizon_blending(vec3 camera_dir) {float t=max(0.0,camera_dir.z/u_fog_horizon_blend);return u_fog_color.a*exp(-3.0*t*t);}float fog_opacity(float t) {const float decay=6.0;float falloff=1.0-min(1.0,exp(-decay*t));falloff*=falloff*falloff;return u_fog_color.a*min(1.0,1.00747*falloff);}vec3 fog_position(vec3 pos) {return (u_fog_matrix*vec4(pos,1.0)).xyz;}vec3 fog_position(vec2 pos) {return fog_position(vec3(pos,0.0));}float fog(vec3 pos) {float depth=length(pos);float opacity=fog_opacity(fog_range(depth));return opacity*fog_horizon_blending(pos/depth);}\n#endif";
+var preludeFogVert = "#ifdef FOG\r\nuniform mediump vec4 u_fog_color;\r\nuniform mediump vec2 u_fog_range;\r\nuniform mediump float u_fog_horizon_blend;\r\nuniform mediump mat4 u_fog_matrix;\r\nvarying vec3 v_fog_pos;\r\nfloat fog_range(float depth) {return (depth-u_fog_range[0])/(u_fog_range[1]-u_fog_range[0]);\r\n}float fog_horizon_blending(vec3 camera_dir) {\r\nfloat t=max(0.0,camera_dir.z/u_fog_horizon_blend);return u_fog_color.a*exp(-3.0*t*t);\r\n}float fog_opacity(float t) {\r\nconst float decay=6.0;\r\nfloat falloff=1.0-min(1.0,exp(-decay*t));falloff*=falloff*falloff;return u_fog_color.a*min(1.0,1.00747*falloff);\r\n}\r\nvec3 fog_position(vec3 pos) {return (u_fog_matrix*vec4(pos,1.0)).xyz;\r\n}\r\nvec3 fog_position(vec2 pos) {\r\nreturn fog_position(vec3(pos,0.0));\r\n}\r\nfloat fog(vec3 pos) {\r\nfloat depth=length(pos);\r\nfloat opacity=fog_opacity(fog_range(depth));\r\nreturn opacity*fog_horizon_blending(pos/depth);\r\n}\r\n#endif";
 
-var preludeFogFrag = "#ifdef FOG\nuniform mediump vec4 u_fog_color;uniform mediump vec2 u_fog_range;uniform mediump float u_fog_horizon_blend;uniform mediump float u_fog_temporal_offset;varying vec3 v_fog_pos;uniform highp vec3 u_frustum_tl;uniform highp vec3 u_frustum_tr;uniform highp vec3 u_frustum_br;uniform highp vec3 u_frustum_bl;uniform highp vec3 u_globe_pos;uniform highp float u_globe_radius;uniform highp vec2 u_viewport;uniform float u_globe_transition;uniform int u_is_globe;float fog_range(float depth) {return (depth-u_fog_range[0])/(u_fog_range[1]-u_fog_range[0]);}float fog_horizon_blending(vec3 camera_dir) {float t=max(0.0,camera_dir.z/u_fog_horizon_blend);return u_fog_color.a*exp(-3.0*t*t);}float fog_opacity(float t) {const float decay=6.0;float falloff=1.0-min(1.0,exp(-decay*t));falloff*=falloff*falloff;return u_fog_color.a*min(1.0,1.00747*falloff);}float globe_glow_progress() {highp vec2 uv=gl_FragCoord.xy/u_viewport;highp vec3 ray_dir=mix(\nmix(u_frustum_tl,u_frustum_tr,uv.x),mix(u_frustum_bl,u_frustum_br,uv.x),1.0-uv.y);highp vec3 dir=normalize(ray_dir);highp vec3 closest_point=dot(u_globe_pos,dir)*dir;highp float sdf=length(closest_point-u_globe_pos)/u_globe_radius;return sdf+PI*0.5;}float fog_opacity(vec3 pos) {float depth=length(pos);return fog_opacity(fog_range(depth));}vec3 fog_apply(vec3 color,vec3 pos) {float depth=length(pos);float opacity;if (u_is_globe==1) {float glow_progress=globe_glow_progress();float t=mix(glow_progress,depth,u_globe_transition);opacity=fog_opacity(fog_range(t));} else {opacity=fog_opacity(fog_range(depth));opacity*=fog_horizon_blending(pos/depth);}return mix(color,u_fog_color.rgb,opacity);}vec4 fog_apply_from_vert(vec4 color,float fog_opac) {float alpha=EPSILON+color.a;color.rgb=mix(color.rgb/alpha,u_fog_color.rgb,fog_opac)*alpha;return color;}vec3 fog_apply_sky_gradient(vec3 camera_ray,vec3 sky_color) {float horizon_blend=fog_horizon_blending(normalize(camera_ray));return mix(sky_color,u_fog_color.rgb,horizon_blend);}vec4 fog_apply_premultiplied(vec4 color,vec3 pos) {float alpha=EPSILON+color.a;color.rgb=fog_apply(color.rgb/alpha,pos)*alpha;return color;}vec3 fog_dither(vec3 color) {vec2 dither_seed=gl_FragCoord.xy+u_fog_temporal_offset;return dither(color,dither_seed);}vec4 fog_dither(vec4 color) {return vec4(fog_dither(color.rgb),color.a);}\n#endif";
+var preludeFogFrag = "#ifdef FOG\r\nuniform mediump vec4 u_fog_color;\r\nuniform mediump vec2 u_fog_range;\r\nuniform mediump float u_fog_horizon_blend;\r\nuniform mediump float u_fog_temporal_offset;\r\nvarying vec3 v_fog_pos;\r\nuniform highp vec3 u_frustum_tl;\r\nuniform highp vec3 u_frustum_tr;\r\nuniform highp vec3 u_frustum_br;\r\nuniform highp vec3 u_frustum_bl;\r\nuniform highp vec3 u_globe_pos;\r\nuniform highp float u_globe_radius;\r\nuniform highp vec2 u_viewport;\r\nuniform float u_globe_transition;\r\nuniform int u_is_globe;\r\nfloat fog_range(float depth) {return (depth-u_fog_range[0])/(u_fog_range[1]-u_fog_range[0]);\r\n}float fog_horizon_blending(vec3 camera_dir) {\r\nfloat t=max(0.0,camera_dir.z/u_fog_horizon_blend);return u_fog_color.a*exp(-3.0*t*t);\r\n}float fog_opacity(float t) {\r\nconst float decay=6.0;\r\nfloat falloff=1.0-min(1.0,exp(-decay*t));falloff*=falloff*falloff;return u_fog_color.a*min(1.0,1.00747*falloff);\r\n}\r\nfloat globe_glow_progress() {\r\nhighp vec2 uv=gl_FragCoord.xy/u_viewport;\r\nhighp vec3 ray_dir=mix(\r\nmix(u_frustum_tl,u_frustum_tr,uv.x),mix(u_frustum_bl,u_frustum_br,uv.x),1.0-uv.y);\r\nhighp vec3 dir=normalize(ray_dir);\r\nhighp vec3 closest_point=dot(u_globe_pos,dir)*dir;\r\nhighp float sdf=length(closest_point-u_globe_pos)/u_globe_radius;\r\nreturn sdf+PI*0.5;\r\n}float fog_opacity(vec3 pos) {\r\nfloat depth=length(pos);\r\nreturn fog_opacity(fog_range(depth));\r\n}\r\nvec3 fog_apply(vec3 color,vec3 pos) {\r\nfloat depth=length(pos);\r\nfloat opacity;\r\nif (u_is_globe==1) {\r\nfloat glow_progress=globe_glow_progress();\r\nfloat t=mix(glow_progress,depth,u_globe_transition);\r\nopacity=fog_opacity(fog_range(t));\r\n} else {\r\nopacity=fog_opacity(fog_range(depth));\r\nopacity*=fog_horizon_blending(pos/depth);\r\n}\r\nreturn mix(color,u_fog_color.rgb,opacity);\r\n}vec4 fog_apply_from_vert(vec4 color,float fog_opac) {\r\nfloat alpha=EPSILON+color.a;\r\ncolor.rgb=mix(color.rgb/alpha,u_fog_color.rgb,fog_opac)*alpha;\r\nreturn color;\r\n}vec3 fog_apply_sky_gradient(vec3 camera_ray,vec3 sky_color) {\r\nfloat horizon_blend=fog_horizon_blending(normalize(camera_ray));\r\nreturn mix(sky_color,u_fog_color.rgb,horizon_blend);\r\n}vec4 fog_apply_premultiplied(vec4 color,vec3 pos) {\r\nfloat alpha=EPSILON+color.a;\r\ncolor.rgb=fog_apply(color.rgb/alpha,pos)*alpha;\r\nreturn color;\r\n}\r\nvec3 fog_dither(vec3 color) {\r\nvec2 dither_seed=gl_FragCoord.xy+u_fog_temporal_offset;\r\nreturn dither(color,dither_seed);\r\n}\r\nvec4 fog_dither(vec4 color) {\r\nreturn vec4(fog_dither(color.rgb),color.a);\r\n}\r\n#endif";
 
-var skyboxCaptureFrag = "\nvarying highp vec3 v_position;uniform highp float u_sun_intensity;uniform highp float u_luminance;uniform lowp vec3 u_sun_direction;uniform highp vec4 u_color_tint_r;uniform highp vec4 u_color_tint_m;\n#ifdef GL_ES\nprecision highp float;\n#endif\n#define BETA_R                  vec3(5.5e-6,13.0e-6,22.4e-6)\n#define BETA_M                  vec3(21e-6,21e-6,21e-6)\n#define MIE_G                   0.76\n#define DENSITY_HEIGHT_SCALE_R  8000.0\n#define DENSITY_HEIGHT_SCALE_M  1200.0\n#define PLANET_RADIUS           6360e3\n#define ATMOSPHERE_RADIUS       6420e3\n#define SAMPLE_STEPS            10\n#define DENSITY_STEPS           4\nfloat ray_sphere_exit(vec3 orig,vec3 dir,float radius) {float a=dot(dir,dir);float b=2.0*dot(dir,orig);float c=dot(orig,orig)-radius*radius;float d=sqrt(b*b-4.0*a*c);return (-b+d)/(2.0*a);}vec3 extinction(vec2 density) {return exp(-vec3(BETA_R*u_color_tint_r.a*density.x+BETA_M*u_color_tint_m.a*density.y));}vec2 local_density(vec3 point) {float height=max(length(point)-PLANET_RADIUS,0.0);float exp_r=exp(-height/DENSITY_HEIGHT_SCALE_R);float exp_m=exp(-height/DENSITY_HEIGHT_SCALE_M);return vec2(exp_r,exp_m);}float phase_ray(float cos_angle) {return (3.0/(16.0*PI))*(1.0+cos_angle*cos_angle);}float phase_mie(float cos_angle) {return (3.0/(8.0*PI))*((1.0-MIE_G*MIE_G)*(1.0+cos_angle*cos_angle))/((2.0+MIE_G*MIE_G)*pow(1.0+MIE_G*MIE_G-2.0*MIE_G*cos_angle,1.5));}vec2 density_to_atmosphere(vec3 point,vec3 light_dir) {float ray_len=ray_sphere_exit(point,light_dir,ATMOSPHERE_RADIUS);float step_len=ray_len/float(DENSITY_STEPS);vec2 density_point_to_atmosphere=vec2(0.0);for (int i=0; i < DENSITY_STEPS;++i) {vec3 point_on_ray=point+light_dir*((float(i)+0.5)*step_len);density_point_to_atmosphere+=local_density(point_on_ray)*step_len;;}return density_point_to_atmosphere;}vec3 atmosphere(vec3 ray_dir,vec3 sun_direction,float sun_intensity) {vec2 density_orig_to_point=vec2(0.0);vec3 scatter_r=vec3(0.0);vec3 scatter_m=vec3(0.0);vec3 origin=vec3(0.0,PLANET_RADIUS,0.0);float ray_len=ray_sphere_exit(origin,ray_dir,ATMOSPHERE_RADIUS);float step_len=ray_len/float(SAMPLE_STEPS);for (int i=0; i < SAMPLE_STEPS;++i) {vec3 point_on_ray=origin+ray_dir*((float(i)+0.5)*step_len);vec2 density=local_density(point_on_ray)*step_len;density_orig_to_point+=density;vec2 density_point_to_atmosphere=density_to_atmosphere(point_on_ray,sun_direction);vec2 density_orig_to_atmosphere=density_orig_to_point+density_point_to_atmosphere;vec3 extinction=extinction(density_orig_to_atmosphere);scatter_r+=density.x*extinction;scatter_m+=density.y*extinction;}float cos_angle=dot(ray_dir,sun_direction);float phase_r=phase_ray(cos_angle);float phase_m=phase_mie(cos_angle);vec3 beta_r=BETA_R*u_color_tint_r.rgb*u_color_tint_r.a;vec3 beta_m=BETA_M*u_color_tint_m.rgb*u_color_tint_m.a;return (scatter_r*phase_r*beta_r+scatter_m*phase_m*beta_m)*sun_intensity;}const float A=0.15;const float B=0.50;const float C=0.10;const float D=0.20;const float E=0.02;const float F=0.30;vec3 uncharted2_tonemap(vec3 x) {return ((x*(A*x+C*B)+D*E)/(x*(A*x+B)+D*F))-E/F;}void main() {vec3 ray_direction=v_position;ray_direction.y=pow(ray_direction.y,5.0);const float y_bias=0.015;ray_direction.y+=y_bias;vec3 color=atmosphere(normalize(ray_direction),u_sun_direction,u_sun_intensity);float white_scale=1.0748724675633854;color=uncharted2_tonemap((log2(2.0/pow(u_luminance,4.0)))*color)*white_scale;gl_FragColor=vec4(color,1.0);}";
+var skyboxCaptureFrag = "\nvarying highp vec3 v_position;\r\nuniform highp float u_sun_intensity;\r\nuniform highp float u_luminance;\r\nuniform lowp vec3 u_sun_direction;\r\nuniform highp vec4 u_color_tint_r;\r\nuniform highp vec4 u_color_tint_m;\r\n#ifdef GL_ES\r\nprecision highp float;\r\n#endif\n#define BETA_R                  vec3(5.5e-6,13.0e-6,22.4e-6)\n#define BETA_M                  vec3(21e-6,21e-6,21e-6)\r\n#define MIE_G                   0.76\r\n#define DENSITY_HEIGHT_SCALE_R  8000.0\n#define DENSITY_HEIGHT_SCALE_M  1200.0\n#define PLANET_RADIUS           6360e3\n#define ATMOSPHERE_RADIUS       6420e3\n#define SAMPLE_STEPS            10\r\n#define DENSITY_STEPS           4\r\nfloat ray_sphere_exit(vec3 orig,vec3 dir,float radius) {\r\nfloat a=dot(dir,dir);\r\nfloat b=2.0*dot(dir,orig);\r\nfloat c=dot(orig,orig)-radius*radius;\r\nfloat d=sqrt(b*b-4.0*a*c);\r\nreturn (-b+d)/(2.0*a);\r\n}\r\nvec3 extinction(vec2 density) {\r\nreturn exp(-vec3(BETA_R*u_color_tint_r.a*density.x+BETA_M*u_color_tint_m.a*density.y));\r\n}\r\nvec2 local_density(vec3 point) {\r\nfloat height=max(length(point)-PLANET_RADIUS,0.0);float exp_r=exp(-height/DENSITY_HEIGHT_SCALE_R);\r\nfloat exp_m=exp(-height/DENSITY_HEIGHT_SCALE_M);\r\nreturn vec2(exp_r,exp_m);\r\n}\r\nfloat phase_ray(float cos_angle) {\r\nreturn (3.0/(16.0*PI))*(1.0+cos_angle*cos_angle);\r\n}\r\nfloat phase_mie(float cos_angle) {\r\nreturn (3.0/(8.0*PI))*((1.0-MIE_G*MIE_G)*(1.0+cos_angle*cos_angle))/\n((2.0+MIE_G*MIE_G)*pow(1.0+MIE_G*MIE_G-2.0*MIE_G*cos_angle,1.5));\r\n}\r\nvec2 density_to_atmosphere(vec3 point,vec3 light_dir) {\r\nfloat ray_len=ray_sphere_exit(point,light_dir,ATMOSPHERE_RADIUS);\r\nfloat step_len=ray_len/float(DENSITY_STEPS);\r\nvec2 density_point_to_atmosphere=vec2(0.0);\r\nfor (int i=0; i < DENSITY_STEPS;++i) {\r\nvec3 point_on_ray=point+light_dir*((float(i)+0.5)*step_len);\r\ndensity_point_to_atmosphere+=local_density(point_on_ray)*step_len;;\r\n}\r\nreturn density_point_to_atmosphere;\r\n}\r\nvec3 atmosphere(vec3 ray_dir,vec3 sun_direction,float sun_intensity) {\r\nvec2 density_orig_to_point=vec2(0.0);\r\nvec3 scatter_r=vec3(0.0);\r\nvec3 scatter_m=vec3(0.0);\r\nvec3 origin=vec3(0.0,PLANET_RADIUS,0.0);\r\nfloat ray_len=ray_sphere_exit(origin,ray_dir,ATMOSPHERE_RADIUS);\r\nfloat step_len=ray_len/float(SAMPLE_STEPS);\r\nfor (int i=0; i < SAMPLE_STEPS;++i) {\r\nvec3 point_on_ray=origin+ray_dir*((float(i)+0.5)*step_len);vec2 density=local_density(point_on_ray)*step_len;\r\ndensity_orig_to_point+=density;vec2 density_point_to_atmosphere=density_to_atmosphere(point_on_ray,sun_direction);vec2 density_orig_to_atmosphere=density_orig_to_point+density_point_to_atmosphere;\r\nvec3 extinction=extinction(density_orig_to_atmosphere);\r\nscatter_r+=density.x*extinction;\r\nscatter_m+=density.y*extinction;\r\n}float cos_angle=dot(ray_dir,sun_direction);\r\nfloat phase_r=phase_ray(cos_angle);\r\nfloat phase_m=phase_mie(cos_angle);vec3 beta_r=BETA_R*u_color_tint_r.rgb*u_color_tint_r.a;\r\nvec3 beta_m=BETA_M*u_color_tint_m.rgb*u_color_tint_m.a;\r\nreturn (scatter_r*phase_r*beta_r+scatter_m*phase_m*beta_m)*sun_intensity;\r\n}\r\nconst float A=0.15;\r\nconst float B=0.50;\r\nconst float C=0.10;\r\nconst float D=0.20;\r\nconst float E=0.02;\r\nconst float F=0.30;\r\nvec3 uncharted2_tonemap(vec3 x) {\r\nreturn ((x*(A*x+C*B)+D*E)/(x*(A*x+B)+D*F))-E/F;\r\n}\r\nvoid main() {\r\nvec3 ray_direction=v_position;ray_direction.y=pow(ray_direction.y,5.0);const float y_bias=0.015;\r\nray_direction.y+=y_bias;\r\nvec3 color=atmosphere(normalize(ray_direction),u_sun_direction,u_sun_intensity);float white_scale=1.0748724675633854;color=uncharted2_tonemap((log2(2.0/pow(u_luminance,4.0)))*color)*white_scale;\r\ngl_FragColor=vec4(color,1.0);\r\n}";
 
-var skyboxCaptureVert = "attribute highp vec3 a_pos_3f;uniform mat3 u_matrix_3f;varying highp vec3 v_position;float map(float value,float start,float end,float new_start,float new_end) {return ((value-start)*(new_end-new_start))/(end-start)+new_start;}void main() {vec4 pos=vec4(u_matrix_3f*a_pos_3f,1.0);v_position=pos.xyz;v_position.y*=-1.0;v_position.y=map(v_position.y,-1.0,1.0,0.0,1.0);gl_Position=vec4(a_pos_3f.xy,0.0,1.0);}";
+var skyboxCaptureVert = "attribute highp vec3 a_pos_3f;\r\nuniform mat3 u_matrix_3f;\r\nvarying highp vec3 v_position;\r\nfloat map(float value,float start,float end,float new_start,float new_end) {\r\nreturn ((value-start)*(new_end-new_start))/(end-start)+new_start;\r\n}\r\nvoid main() {\r\nvec4 pos=vec4(u_matrix_3f*a_pos_3f,1.0);\r\nv_position=pos.xyz;\r\nv_position.y*=-1.0;v_position.y=map(v_position.y,-1.0,1.0,0.0,1.0);\r\ngl_Position=vec4(a_pos_3f.xy,0.0,1.0);\r\n}";
 
-var globeFrag = "uniform sampler2D u_image0;varying vec2 v_pos0;\n#ifndef FOG\nuniform highp vec3 u_frustum_tl;uniform highp vec3 u_frustum_tr;uniform highp vec3 u_frustum_br;uniform highp vec3 u_frustum_bl;uniform highp vec3 u_globe_pos;uniform highp float u_globe_radius;uniform vec2 u_viewport;\n#endif\nvoid main() {\n#ifdef CUSTOM_ANTIALIASING\nvec2 uv=gl_FragCoord.xy/u_viewport;highp vec3 ray_dir=mix(\nmix(u_frustum_tl,u_frustum_tr,uv.x),mix(u_frustum_bl,u_frustum_br,uv.x),1.0-uv.y);vec3 dir=normalize(ray_dir);vec3 closest_point=dot(u_globe_pos,dir)*dir;float norm_dist_from_center=1.0-length(closest_point-u_globe_pos)/u_globe_radius;const float antialias_pixel=2.0;float antialias_factor=antialias_pixel*fwidth(norm_dist_from_center);float antialias=smoothstep(0.0,antialias_factor,norm_dist_from_center);vec4 raster=texture2D(u_image0,v_pos0);vec4 color=vec4(raster.rgb*antialias,raster.a*antialias);\n#else\nvec4 color=texture2D(u_image0,v_pos0);\n#endif\n#ifdef FOG\ncolor=fog_dither(fog_apply_premultiplied(color,v_fog_pos));\n#endif\ngl_FragColor=color;\n#ifdef TERRAIN_WIREFRAME\ngl_FragColor=vec4(1.0,0.0,0.0,0.8);\n#endif\n#ifdef OVERDRAW_INSPECTOR\ngl_FragColor=vec4(1.0);\n#endif\n}";
+var globeFrag = "uniform sampler2D u_image0;\r\nvarying vec2 v_pos0;\r\n#ifndef FOG\r\nuniform highp vec3 u_frustum_tl;\r\nuniform highp vec3 u_frustum_tr;\r\nuniform highp vec3 u_frustum_br;\r\nuniform highp vec3 u_frustum_bl;\r\nuniform highp vec3 u_globe_pos;\r\nuniform highp float u_globe_radius;\r\nuniform vec2 u_viewport;\r\n#endif\r\nvoid main() {\r\n#ifdef CUSTOM_ANTIALIASING\r\nvec2 uv=gl_FragCoord.xy/u_viewport;\r\nhighp vec3 ray_dir=mix(\r\nmix(u_frustum_tl,u_frustum_tr,uv.x),mix(u_frustum_bl,u_frustum_br,uv.x),1.0-uv.y);\r\nvec3 dir=normalize(ray_dir);\r\nvec3 closest_point=dot(u_globe_pos,dir)*dir;\r\nfloat norm_dist_from_center=1.0-length(closest_point-u_globe_pos)/u_globe_radius;\r\nconst float antialias_pixel=2.0;\r\nfloat antialias_factor=antialias_pixel*fwidth(norm_dist_from_center);\r\nfloat antialias=smoothstep(0.0,antialias_factor,norm_dist_from_center);\r\nvec4 raster=texture2D(u_image0,v_pos0);\r\nvec4 color=vec4(raster.rgb*antialias,raster.a*antialias);\r\n#else\r\nvec4 color=texture2D(u_image0,v_pos0);\r\n#endif\r\n#ifdef FOG\r\ncolor=fog_dither(fog_apply_premultiplied(color,v_fog_pos));\r\n#endif\r\ngl_FragColor=color;\r\n#ifdef TERRAIN_WIREFRAME\r\ngl_FragColor=vec4(1.0,0.0,0.0,0.8);\r\n#endif\r\n#ifdef OVERDRAW_INSPECTOR\r\ngl_FragColor=vec4(1.0);\r\n#endif\r\n}";
 
-var globeVert = "uniform mat4 u_proj_matrix;uniform mat4 u_normalize_matrix;uniform mat4 u_globe_matrix;uniform mat4 u_merc_matrix;uniform float u_zoom_transition;uniform vec2 u_merc_center;uniform mat3 u_grid_matrix;\n#ifdef GLOBE_POLES\nattribute vec3 a_globe_pos;attribute vec2 a_merc_pos;attribute vec2 a_uv;\n#else\nattribute vec2 a_pos;\n#endif\nvarying vec2 v_pos0;const float wireframeOffset=1e3;float mercatorXfromLng(float lng) {return (180.0+lng)/360.0;}float mercatorYfromLat(float lat) {return (180.0-(RAD_TO_DEG*log(tan(QUARTER_PI+lat/2.0*DEG_TO_RAD))))/360.0;}vec3 latLngToECEF(vec2 latLng) {latLng=DEG_TO_RAD*latLng;float cosLat=cos(latLng[0]);float sinLat=sin(latLng[0]);float cosLng=cos(latLng[1]);float sinLng=sin(latLng[1]);float sx=cosLat*sinLng*GLOBE_RADIUS;float sy=-sinLat*GLOBE_RADIUS;float sz=cosLat*cosLng*GLOBE_RADIUS;return vec3(sx,sy,sz);}void main() {\n#ifdef GLOBE_POLES\nvec3 globe_pos=a_globe_pos;vec2 merc_pos=a_merc_pos;vec2 uv=a_uv;\n#else\nfloat tiles=u_grid_matrix[0][2];float idy=u_grid_matrix[1][2];float S=u_grid_matrix[2][2];vec3 latLng=u_grid_matrix*vec3(a_pos,1.0);float mercatorY=mercatorYfromLat(latLng[0]);float uvY=mercatorY*tiles-idy;float mercatorX=mercatorXfromLng(latLng[1]);float uvX=a_pos[0]*S;vec3 globe_pos=latLngToECEF(latLng.xy);vec2 merc_pos=vec2(mercatorX,mercatorY);vec2 uv=vec2(uvX,uvY);\n#endif\nv_pos0=uv;uv=uv*EXTENT;vec4 up_vector=vec4(elevationVector(uv),1.0);float height=elevation(uv);\n#ifdef TERRAIN_WIREFRAME\nheight+=wireframeOffset;\n#endif\nglobe_pos+=up_vector.xyz*height;vec4 globe=u_globe_matrix*vec4(globe_pos,1.0);vec4 mercator=vec4(0.0);if (u_zoom_transition > 0.0) {mercator=vec4(merc_pos,height,1.0);mercator.xy-=u_merc_center;mercator.x=wrap(mercator.x,-0.5,0.5);mercator=u_merc_matrix*mercator;}vec3 position=mix(globe.xyz,mercator.xyz,u_zoom_transition);gl_Position=u_proj_matrix*vec4(position,1.0);\n#ifdef FOG\nv_fog_pos=fog_position((u_normalize_matrix*vec4(globe_pos,1.0)).xyz);\n#endif\n}";
+var globeVert = "uniform mat4 u_proj_matrix;\r\nuniform mat4 u_normalize_matrix;\r\nuniform mat4 u_globe_matrix;\r\nuniform mat4 u_merc_matrix;\r\nuniform float u_zoom_transition;\r\nuniform vec2 u_merc_center;\r\nuniform mat3 u_grid_matrix;\r\n#ifdef GLOBE_POLES\r\nattribute vec3 a_globe_pos;\r\nattribute vec2 a_merc_pos;\r\nattribute vec2 a_uv;\r\n#else\r\nattribute vec2 a_pos;\r\n#endif\r\nvarying vec2 v_pos0;\r\nconst float wireframeOffset=1e3;\r\nfloat mercatorXfromLng(float lng) {\r\nreturn (180.0+lng)/360.0;\r\n}\r\nfloat mercatorYfromLat(float lat) {\r\nreturn (180.0-(RAD_TO_DEG*log(tan(QUARTER_PI+lat/2.0*DEG_TO_RAD))))/360.0;\r\n}\r\nvec3 latLngToECEF(vec2 latLng) {\r\nlatLng=DEG_TO_RAD*latLng;\r\nfloat cosLat=cos(latLng[0]);\r\nfloat sinLat=sin(latLng[0]);\r\nfloat cosLng=cos(latLng[1]);\r\nfloat sinLng=sin(latLng[1]);float sx=cosLat*sinLng*GLOBE_RADIUS;\r\nfloat sy=-sinLat*GLOBE_RADIUS;\r\nfloat sz=cosLat*cosLng*GLOBE_RADIUS;\r\nreturn vec3(sx,sy,sz);\r\n}\r\nvoid main() {\r\n#ifdef GLOBE_POLES\r\nvec3 globe_pos=a_globe_pos;\r\nvec2 merc_pos=a_merc_pos;\r\nvec2 uv=a_uv;\r\n#else\nfloat tiles=u_grid_matrix[0][2];\r\nfloat idy=u_grid_matrix[1][2];\r\nfloat S=u_grid_matrix[2][2];\r\nvec3 latLng=u_grid_matrix*vec3(a_pos,1.0);\r\nfloat mercatorY=mercatorYfromLat(latLng[0]);\r\nfloat uvY=mercatorY*tiles-idy;\r\nfloat mercatorX=mercatorXfromLng(latLng[1]);\r\nfloat uvX=a_pos[0]*S;\r\nvec3 globe_pos=latLngToECEF(latLng.xy);\r\nvec2 merc_pos=vec2(mercatorX,mercatorY);\r\nvec2 uv=vec2(uvX,uvY);\r\n#endif\r\nv_pos0=uv;\r\nuv=uv*EXTENT;\r\nvec4 up_vector=vec4(elevationVector(uv),1.0);\r\nfloat height=elevation(uv);\r\n#ifdef TERRAIN_WIREFRAME\r\nheight+=wireframeOffset;\r\n#endif\r\nglobe_pos+=up_vector.xyz*height;\r\nvec4 globe=u_globe_matrix*vec4(globe_pos,1.0);\r\nvec4 mercator=vec4(0.0);\r\nif (u_zoom_transition > 0.0) {\r\nmercator=vec4(merc_pos,height,1.0);\r\nmercator.xy-=u_merc_center;\r\nmercator.x=wrap(mercator.x,-0.5,0.5);\r\nmercator=u_merc_matrix*mercator;\r\n}\r\nvec3 position=mix(globe.xyz,mercator.xyz,u_zoom_transition);\r\ngl_Position=u_proj_matrix*vec4(position,1.0);\r\n#ifdef FOG\r\nv_fog_pos=fog_position((u_normalize_matrix*vec4(globe_pos,1.0)).xyz);\r\n#endif\r\n}";
 
-var atmosphereFrag = "uniform float u_transition;uniform highp float u_fadeout_range;uniform highp float u_temporal_offset;uniform vec3 u_start_color;uniform vec4 u_color;uniform vec4 u_space_color;uniform vec4 u_high_color;uniform float u_star_intensity;uniform float u_star_size;uniform float u_star_density;uniform float u_horizon_angle;uniform mat4 u_rotation_matrix;varying highp vec3 v_ray_dir;varying highp vec3 v_horizon_dir;highp float random(highp vec3 p) {p=fract(p*vec3(23.2342,97.1231,91.2342));p+=dot(p.zxy,p.yxz+123.1234);return fract(p.x*p.y);}float stars(vec3 p,float scale,vec2 offset) {vec2 uv_scale=(u_viewport/u_star_size)*scale;vec3 position=vec3(p.xy*uv_scale+offset*u_viewport,p.z);vec3 q=fract(position)-0.5;vec3 id=floor(position);float random_visibility=step(random(id),u_star_density);float circle=smoothstep(0.5+u_star_intensity,0.5,length(q));return circle*random_visibility;}void main() {highp vec3 dir=normalize(v_ray_dir);\n#ifdef PROJECTION_GLOBE_VIEW\nfloat globe_pos_dot_dir=dot(u_globe_pos,dir);highp vec3 closest_point_forward=abs(globe_pos_dot_dir)*dir;float norm_dist_from_center=length(closest_point_forward-u_globe_pos)/u_globe_radius;if (norm_dist_from_center < 0.98) {discard;return;}\n#endif\nhighp vec3 horizon_dir=normalize(v_horizon_dir);float horizon_angle_mercator=dir.y < horizon_dir.y ?\n0.0 : max(acos(dot(dir,horizon_dir)),0.0);\n#ifdef PROJECTION_GLOBE_VIEW\nhighp vec3 closest_point=globe_pos_dot_dir*dir;float closest_point_to_center=length(closest_point-u_globe_pos);float theta=asin(clamp(closest_point_to_center/length(u_globe_pos),-1.0,1.0));float horizon_angle=globe_pos_dot_dir < 0.0 ?\nPI-theta-u_horizon_angle : theta-u_horizon_angle;float angle_t=pow(u_transition,10.0);horizon_angle=mix(horizon_angle,horizon_angle_mercator,angle_t);\n#else\nfloat horizon_angle=horizon_angle_mercator;\n#endif\nhorizon_angle/=PI;float t=exp(-horizon_angle/u_fadeout_range);float alpha_0=u_color.a;float alpha_1=u_high_color.a;float alpha_2=u_space_color.a;vec3 color_stop_0=u_color.rgb;vec3 color_stop_1=u_high_color.rgb;vec3 color_stop_2=u_space_color.rgb;vec3 c0=mix(color_stop_2,color_stop_1,alpha_1);vec3 c1=mix(c0,color_stop_0,alpha_0);vec3 c2=mix(c0,c1,t);vec3 c =mix(color_stop_2,c2,t);float a0=mix(alpha_2,1.0,alpha_1);float a1=mix(a0,1.0,alpha_0);float a2=mix(a0,a1,t);float a =mix(alpha_2,a2,t);vec2 uv=gl_FragCoord.xy/u_viewport-0.5;float aspect_ratio=u_viewport.x/u_viewport.y;vec4 uv_dir=vec4(normalize(vec3(uv.x*aspect_ratio,uv.y,1.0)),1.0);uv_dir=u_rotation_matrix*uv_dir;vec3 n=abs(uv_dir.xyz);vec2 uv_remap=(n.x > n.y && n.x > n.z) ? uv_dir.yz/uv_dir.x:\n(n.y > n.x && n.y > n.z) ? uv_dir.zx/uv_dir.y:\nuv_dir.xy/uv_dir.z;uv_remap.x/=aspect_ratio;vec3 D=vec3(uv_remap,1.0);highp float star_field=0.0;if (u_star_intensity > 0.0) {star_field+=stars(D,1.2,vec2(0.0,0.0));star_field+=stars(D,1.0,vec2(1.0,0.0));star_field+=stars(D,0.8,vec2(0.0,1.0));star_field+=stars(D,0.6,vec2(1.0,1.0));star_field*=(1.0-pow(t,0.25+(1.0-u_high_color.a)*0.75));c+=star_field*alpha_2;}c=dither(c,gl_FragCoord.xy+u_temporal_offset);gl_FragColor=vec4(c,a);}";
+var atmosphereFrag = "uniform float u_transition;\r\nuniform highp float u_fadeout_range;\r\nuniform highp float u_temporal_offset;\r\nuniform vec3 u_start_color;\r\nuniform vec4 u_color;\r\nuniform vec4 u_space_color;\r\nuniform vec4 u_high_color;\r\nuniform float u_star_intensity;\r\nuniform float u_star_size;\r\nuniform float u_star_density;\r\nuniform float u_horizon_angle;\r\nuniform mat4 u_rotation_matrix;\r\nvarying highp vec3 v_ray_dir;\r\nvarying highp vec3 v_horizon_dir;\r\nhighp float random(highp vec3 p) {\r\np=fract(p*vec3(23.2342,97.1231,91.2342));\r\np+=dot(p.zxy,p.yxz+123.1234);\r\nreturn fract(p.x*p.y);\r\n}\r\nfloat stars(vec3 p,float scale,vec2 offset) {\r\nvec2 uv_scale=(u_viewport/u_star_size)*scale;\r\nvec3 position=vec3(p.xy*uv_scale+offset*u_viewport,p.z);\r\nvec3 q=fract(position)-0.5;\r\nvec3 id=floor(position);\r\nfloat random_visibility=step(random(id),u_star_density);\r\nfloat circle=smoothstep(0.5+u_star_intensity,0.5,length(q));\r\nreturn circle*random_visibility;\r\n}\r\nvoid main() {\r\nhighp vec3 dir=normalize(v_ray_dir);\r\n#ifdef PROJECTION_GLOBE_VIEW\r\nfloat globe_pos_dot_dir=dot(u_globe_pos,dir);\r\nhighp vec3 closest_point_forward=abs(globe_pos_dot_dir)*dir;\r\nfloat norm_dist_from_center=length(closest_point_forward-u_globe_pos)/u_globe_radius;if (norm_dist_from_center < 0.98) {\r\ndiscard;\r\nreturn;\r\n}\r\n#endif\r\nhighp vec3 horizon_dir=normalize(v_horizon_dir);\r\nfloat horizon_angle_mercator=dir.y < horizon_dir.y ?\r\n0.0 : max(acos(dot(dir,horizon_dir)),0.0);\r\n#ifdef PROJECTION_GLOBE_VIEW\nhighp vec3 closest_point=globe_pos_dot_dir*dir;\r\nfloat closest_point_to_center=length(closest_point-u_globe_pos);\r\nfloat theta=asin(clamp(closest_point_to_center/length(u_globe_pos),-1.0,1.0));float horizon_angle=globe_pos_dot_dir < 0.0 ?\r\nPI-theta-u_horizon_angle : theta-u_horizon_angle;float angle_t=pow(u_transition,10.0);\r\nhorizon_angle=mix(horizon_angle,horizon_angle_mercator,angle_t);\r\n#else\r\nfloat horizon_angle=horizon_angle_mercator;\r\n#endif\nhorizon_angle/=PI;float t=exp(-horizon_angle/u_fadeout_range);\r\nfloat alpha_0=u_color.a;\r\nfloat alpha_1=u_high_color.a;\r\nfloat alpha_2=u_space_color.a;\r\nvec3 color_stop_0=u_color.rgb;\r\nvec3 color_stop_1=u_high_color.rgb;\r\nvec3 color_stop_2=u_space_color.rgb;\r\nvec3 c0=mix(color_stop_2,color_stop_1,alpha_1);\r\nvec3 c1=mix(c0,color_stop_0,alpha_0);\r\nvec3 c2=mix(c0,c1,t);\r\nvec3 c =mix(color_stop_2,c2,t);float a0=mix(alpha_2,1.0,alpha_1);\r\nfloat a1=mix(a0,1.0,alpha_0);\r\nfloat a2=mix(a0,a1,t);\r\nfloat a =mix(alpha_2,a2,t);\r\nvec2 uv=gl_FragCoord.xy/u_viewport-0.5;\r\nfloat aspect_ratio=u_viewport.x/u_viewport.y;\r\nvec4 uv_dir=vec4(normalize(vec3(uv.x*aspect_ratio,uv.y,1.0)),1.0);\r\nuv_dir=u_rotation_matrix*uv_dir;\r\nvec3 n=abs(uv_dir.xyz);\r\nvec2 uv_remap=(n.x > n.y && n.x > n.z) ? uv_dir.yz/uv_dir.x:\r\n(n.y > n.x && n.y > n.z) ? uv_dir.zx/uv_dir.y:\r\nuv_dir.xy/uv_dir.z;\r\nuv_remap.x/=aspect_ratio;\r\nvec3 D=vec3(uv_remap,1.0);highp float star_field=0.0;\r\nif (u_star_intensity > 0.0) {star_field+=stars(D,1.2,vec2(0.0,0.0));\r\nstar_field+=stars(D,1.0,vec2(1.0,0.0));\r\nstar_field+=stars(D,0.8,vec2(0.0,1.0));\r\nstar_field+=stars(D,0.6,vec2(1.0,1.0));star_field*=(1.0-pow(t,0.25+(1.0-u_high_color.a)*0.75));c+=star_field*alpha_2;\r\n}c=dither(c,gl_FragCoord.xy+u_temporal_offset);\r\ngl_FragColor=vec4(c,a);\r\n}";
 
-var atmosphereVert = "attribute vec3 a_pos;attribute vec2 a_uv;uniform vec3 u_frustum_tl;uniform vec3 u_frustum_tr;uniform vec3 u_frustum_br;uniform vec3 u_frustum_bl;uniform float u_horizon;varying highp vec3 v_ray_dir;varying highp vec3 v_horizon_dir;void main() {v_ray_dir=mix(\nmix(u_frustum_tl,u_frustum_tr,a_uv.x),mix(u_frustum_bl,u_frustum_br,a_uv.x),a_uv.y);v_horizon_dir=mix(\nmix(u_frustum_tl,u_frustum_bl,u_horizon),mix(u_frustum_tr,u_frustum_br,u_horizon),a_uv.x);gl_Position=vec4(a_pos,1.0);}";
+var atmosphereVert = "attribute vec3 a_pos;\r\nattribute vec2 a_uv;uniform vec3 u_frustum_tl;\r\nuniform vec3 u_frustum_tr;\r\nuniform vec3 u_frustum_br;\r\nuniform vec3 u_frustum_bl;\r\nuniform float u_horizon;\r\nvarying highp vec3 v_ray_dir;\r\nvarying highp vec3 v_horizon_dir;\r\nvoid main() {\r\nv_ray_dir=mix(\r\nmix(u_frustum_tl,u_frustum_tr,a_uv.x),mix(u_frustum_bl,u_frustum_br,a_uv.x),a_uv.y);\r\nv_horizon_dir=mix(\r\nmix(u_frustum_tl,u_frustum_bl,u_horizon),mix(u_frustum_tr,u_frustum_br,u_horizon),a_uv.x);\r\ngl_Position=vec4(a_pos,1.0);\r\n}";
 
 let preludeTerrain = {};
 let preludeFog = {};
@@ -53614,7 +53555,7 @@ class Map extends Camera {
         });
         return this;
     }
-    cacheAreaForOffline(flightPlanId, lat, lng, zoom) {
+    cacheAreaForOffline(key, lat, lng, zoom) {
         try {
             const sources = this.style ? Object.values(this.style._sourceCaches) : [];
             const transforms = [];
@@ -53622,20 +53563,20 @@ class Map extends Camera {
             newTransform.center = new ref_properties.LngLat(lng, lat);
             newTransform.zoom = zoom;
             transforms.push(newTransform);
-            ref_properties.asyncAll(sources, (source, done) => source.preloadTilesForOffline(flightPlanId, newTransform, done), () => {
+            ref_properties.asyncAll(sources, (source, done) => source.preloadTilesForOffline(key, newTransform, done), () => {
                 this.triggerRepaint();
             });
         } catch (e) {
         }
     }
-    async deleteCachedArea(flightPlanId) {
-        const cachedTiles = await ref_properties.getCachedTilesForFlightPlan(flightPlanId);
+    async deleteCachedArea(key) {
+        const cachedTiles = await ref_properties.getCachedTilesForKey(key);
         for (let i = 0; i < cachedTiles.length; i++) {
             const cachedTile = cachedTiles[i];
-            const flightPlanIds = cachedTile.flightPlanIds.filter(id => id !== flightPlanId);
-            const tileUsedByMoreThanOneFlightPlan = flightPlanIds > 0;
-            if (tileUsedByMoreThanOneFlightPlan) {
-                await ref_properties.db.tiles.where('url').equalsIgnoreCase(cachedTile.url).modify({ flightPlanIds });
+            const keys = cachedTile.keys.filter(id => id !== key);
+            const tileUsedByMoreThanOneKey = keys > 0;
+            if (tileUsedByMoreThanOneKey) {
+                await ref_properties.db.tiles.where('url').equalsIgnoreCase(cachedTile.url).modify({ keys });
             } else {
                 await ref_properties.db.tiles.where('url').equalsIgnoreCase(cachedTile.url).delete();
             }
@@ -54868,6 +54809,7 @@ ref_properties.window.performance;
 const exported = {
     version: ref_properties.version,
     supported,
+    getCachedTilesForKey: ref_properties.getCachedTilesForKey,
     setRTLTextPlugin: ref_properties.setRTLTextPlugin,
     getRTLTextPluginStatus: ref_properties.getRTLTextPluginStatus,
     Map,

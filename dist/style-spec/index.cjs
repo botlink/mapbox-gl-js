@@ -6761,70 +6761,102 @@
   	promoteId: promoteId
   };
 
+  // Note: This regex matches even invalid JSON strings, but since we’re
+  // working on the output of `JSON.stringify` we know that only valid strings
+  // are present (unless the user supplied a weird `options.indent` but in
+  // that case we don’t care since the output would be invalid anyway).
   var stringOrChar = /("(?:[^\\"]|\\.)*")|[:,]/g;
+
   var jsonStringifyPrettyCompact = function stringify(passedObj, options) {
-      var indent, maxLength, replacer;
-      options = options || {};
-      indent = JSON.stringify([1], undefined, options.indent === undefined ? 2 : options.indent).slice(2, -3);
-      maxLength = indent === '' ? Infinity : options.maxLength === undefined ? 80 : options.maxLength;
-      replacer = options.replacer;
-      return function _stringify(obj, currentIndent, reserved) {
-          var end, index, items, key, keyPart, keys, length, nextIndent, prettified, start, string, value;
-          if (obj && typeof obj.toJSON === 'function') {
-              obj = obj.toJSON();
+    var indent, maxLength, replacer;
+
+    options = options || {};
+    indent = JSON.stringify(
+      [1],
+      undefined,
+      options.indent === undefined ? 2 : options.indent
+    ).slice(2, -3);
+    maxLength =
+      indent === ""
+        ? Infinity
+        : options.maxLength === undefined
+        ? 80
+        : options.maxLength;
+    replacer = options.replacer;
+
+    return (function _stringify(obj, currentIndent, reserved) {
+      // prettier-ignore
+      var end, index, items, key, keyPart, keys, length, nextIndent, prettified, start, string, value;
+
+      if (obj && typeof obj.toJSON === "function") {
+        obj = obj.toJSON();
+      }
+
+      string = JSON.stringify(obj, replacer);
+
+      if (string === undefined) {
+        return string;
+      }
+
+      length = maxLength - currentIndent.length - reserved;
+
+      if (string.length <= length) {
+        prettified = string.replace(stringOrChar, function(match, stringLiteral) {
+          return stringLiteral || match + " ";
+        });
+        if (prettified.length <= length) {
+          return prettified;
+        }
+      }
+
+      if (replacer != null) {
+        obj = JSON.parse(string);
+        replacer = undefined;
+      }
+
+      if (typeof obj === "object" && obj !== null) {
+        nextIndent = currentIndent + indent;
+        items = [];
+        index = 0;
+
+        if (Array.isArray(obj)) {
+          start = "[";
+          end = "]";
+          length = obj.length;
+          for (; index < length; index++) {
+            items.push(
+              _stringify(obj[index], nextIndent, index === length - 1 ? 0 : 1) ||
+                "null"
+            );
           }
-          string = JSON.stringify(obj, replacer);
-          if (string === undefined) {
-              return string;
+        } else {
+          start = "{";
+          end = "}";
+          keys = Object.keys(obj);
+          length = keys.length;
+          for (; index < length; index++) {
+            key = keys[index];
+            keyPart = JSON.stringify(key) + ": ";
+            value = _stringify(
+              obj[key],
+              nextIndent,
+              keyPart.length + (index === length - 1 ? 0 : 1)
+            );
+            if (value !== undefined) {
+              items.push(keyPart + value);
+            }
           }
-          length = maxLength - currentIndent.length - reserved;
-          if (string.length <= length) {
-              prettified = string.replace(stringOrChar, function (match, stringLiteral) {
-                  return stringLiteral || match + ' ';
-              });
-              if (prettified.length <= length) {
-                  return prettified;
-              }
-          }
-          if (replacer != null) {
-              obj = JSON.parse(string);
-              replacer = undefined;
-          }
-          if (typeof obj === 'object' && obj !== null) {
-              nextIndent = currentIndent + indent;
-              items = [];
-              index = 0;
-              if (Array.isArray(obj)) {
-                  start = '[';
-                  end = ']';
-                  length = obj.length;
-                  for (; index < length; index++) {
-                      items.push(_stringify(obj[index], nextIndent, index === length - 1 ? 0 : 1) || 'null');
-                  }
-              } else {
-                  start = '{';
-                  end = '}';
-                  keys = Object.keys(obj);
-                  length = keys.length;
-                  for (; index < length; index++) {
-                      key = keys[index];
-                      keyPart = JSON.stringify(key) + ': ';
-                      value = _stringify(obj[key], nextIndent, keyPart.length + (index === length - 1 ? 0 : 1));
-                      if (value !== undefined) {
-                          items.push(keyPart + value);
-                      }
-                  }
-              }
-              if (items.length > 0) {
-                  return [
-                      start,
-                      indent + items.join(',\n' + nextIndent),
-                      end
-                  ].join('\n' + currentIndent);
-              }
-          }
-          return string;
-      }(passedObj, '', 0);
+        }
+
+        if (items.length > 0) {
+          return [start, indent + items.join(",\n" + nextIndent), end].join(
+            "\n" + currentIndent
+          );
+        }
+      }
+
+      return string;
+    })(passedObj, "", 0);
   };
 
   var stringifyPretty = jsonStringifyPrettyCompact;
@@ -8547,1007 +8579,207 @@
   }
 
   var csscolorparser = createCommonjsModule(function (module, exports) {
+  // (c) Dean McNamee <dean@gmail.com>, 2012.
+  //
+  // https://github.com/deanm/css-color-parser-js
+  //
+  // Permission is hereby granted, free of charge, to any person obtaining a copy
+  // of this software and associated documentation files (the "Software"), to
+  // deal in the Software without restriction, including without limitation the
+  // rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+  // sell copies of the Software, and to permit persons to whom the Software is
+  // furnished to do so, subject to the following conditions:
+  //
+  // The above copyright notice and this permission notice shall be included in
+  // all copies or substantial portions of the Software.
+  //
+  // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+  // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+  // IN THE SOFTWARE.
+
+  // http://www.w3.org/TR/css3-color/
   var kCSSColorTable = {
-      'transparent': [
-          0,
-          0,
-          0,
-          0
-      ],
-      'aliceblue': [
-          240,
-          248,
-          255,
-          1
-      ],
-      'antiquewhite': [
-          250,
-          235,
-          215,
-          1
-      ],
-      'aqua': [
-          0,
-          255,
-          255,
-          1
-      ],
-      'aquamarine': [
-          127,
-          255,
-          212,
-          1
-      ],
-      'azure': [
-          240,
-          255,
-          255,
-          1
-      ],
-      'beige': [
-          245,
-          245,
-          220,
-          1
-      ],
-      'bisque': [
-          255,
-          228,
-          196,
-          1
-      ],
-      'black': [
-          0,
-          0,
-          0,
-          1
-      ],
-      'blanchedalmond': [
-          255,
-          235,
-          205,
-          1
-      ],
-      'blue': [
-          0,
-          0,
-          255,
-          1
-      ],
-      'blueviolet': [
-          138,
-          43,
-          226,
-          1
-      ],
-      'brown': [
-          165,
-          42,
-          42,
-          1
-      ],
-      'burlywood': [
-          222,
-          184,
-          135,
-          1
-      ],
-      'cadetblue': [
-          95,
-          158,
-          160,
-          1
-      ],
-      'chartreuse': [
-          127,
-          255,
-          0,
-          1
-      ],
-      'chocolate': [
-          210,
-          105,
-          30,
-          1
-      ],
-      'coral': [
-          255,
-          127,
-          80,
-          1
-      ],
-      'cornflowerblue': [
-          100,
-          149,
-          237,
-          1
-      ],
-      'cornsilk': [
-          255,
-          248,
-          220,
-          1
-      ],
-      'crimson': [
-          220,
-          20,
-          60,
-          1
-      ],
-      'cyan': [
-          0,
-          255,
-          255,
-          1
-      ],
-      'darkblue': [
-          0,
-          0,
-          139,
-          1
-      ],
-      'darkcyan': [
-          0,
-          139,
-          139,
-          1
-      ],
-      'darkgoldenrod': [
-          184,
-          134,
-          11,
-          1
-      ],
-      'darkgray': [
-          169,
-          169,
-          169,
-          1
-      ],
-      'darkgreen': [
-          0,
-          100,
-          0,
-          1
-      ],
-      'darkgrey': [
-          169,
-          169,
-          169,
-          1
-      ],
-      'darkkhaki': [
-          189,
-          183,
-          107,
-          1
-      ],
-      'darkmagenta': [
-          139,
-          0,
-          139,
-          1
-      ],
-      'darkolivegreen': [
-          85,
-          107,
-          47,
-          1
-      ],
-      'darkorange': [
-          255,
-          140,
-          0,
-          1
-      ],
-      'darkorchid': [
-          153,
-          50,
-          204,
-          1
-      ],
-      'darkred': [
-          139,
-          0,
-          0,
-          1
-      ],
-      'darksalmon': [
-          233,
-          150,
-          122,
-          1
-      ],
-      'darkseagreen': [
-          143,
-          188,
-          143,
-          1
-      ],
-      'darkslateblue': [
-          72,
-          61,
-          139,
-          1
-      ],
-      'darkslategray': [
-          47,
-          79,
-          79,
-          1
-      ],
-      'darkslategrey': [
-          47,
-          79,
-          79,
-          1
-      ],
-      'darkturquoise': [
-          0,
-          206,
-          209,
-          1
-      ],
-      'darkviolet': [
-          148,
-          0,
-          211,
-          1
-      ],
-      'deeppink': [
-          255,
-          20,
-          147,
-          1
-      ],
-      'deepskyblue': [
-          0,
-          191,
-          255,
-          1
-      ],
-      'dimgray': [
-          105,
-          105,
-          105,
-          1
-      ],
-      'dimgrey': [
-          105,
-          105,
-          105,
-          1
-      ],
-      'dodgerblue': [
-          30,
-          144,
-          255,
-          1
-      ],
-      'firebrick': [
-          178,
-          34,
-          34,
-          1
-      ],
-      'floralwhite': [
-          255,
-          250,
-          240,
-          1
-      ],
-      'forestgreen': [
-          34,
-          139,
-          34,
-          1
-      ],
-      'fuchsia': [
-          255,
-          0,
-          255,
-          1
-      ],
-      'gainsboro': [
-          220,
-          220,
-          220,
-          1
-      ],
-      'ghostwhite': [
-          248,
-          248,
-          255,
-          1
-      ],
-      'gold': [
-          255,
-          215,
-          0,
-          1
-      ],
-      'goldenrod': [
-          218,
-          165,
-          32,
-          1
-      ],
-      'gray': [
-          128,
-          128,
-          128,
-          1
-      ],
-      'green': [
-          0,
-          128,
-          0,
-          1
-      ],
-      'greenyellow': [
-          173,
-          255,
-          47,
-          1
-      ],
-      'grey': [
-          128,
-          128,
-          128,
-          1
-      ],
-      'honeydew': [
-          240,
-          255,
-          240,
-          1
-      ],
-      'hotpink': [
-          255,
-          105,
-          180,
-          1
-      ],
-      'indianred': [
-          205,
-          92,
-          92,
-          1
-      ],
-      'indigo': [
-          75,
-          0,
-          130,
-          1
-      ],
-      'ivory': [
-          255,
-          255,
-          240,
-          1
-      ],
-      'khaki': [
-          240,
-          230,
-          140,
-          1
-      ],
-      'lavender': [
-          230,
-          230,
-          250,
-          1
-      ],
-      'lavenderblush': [
-          255,
-          240,
-          245,
-          1
-      ],
-      'lawngreen': [
-          124,
-          252,
-          0,
-          1
-      ],
-      'lemonchiffon': [
-          255,
-          250,
-          205,
-          1
-      ],
-      'lightblue': [
-          173,
-          216,
-          230,
-          1
-      ],
-      'lightcoral': [
-          240,
-          128,
-          128,
-          1
-      ],
-      'lightcyan': [
-          224,
-          255,
-          255,
-          1
-      ],
-      'lightgoldenrodyellow': [
-          250,
-          250,
-          210,
-          1
-      ],
-      'lightgray': [
-          211,
-          211,
-          211,
-          1
-      ],
-      'lightgreen': [
-          144,
-          238,
-          144,
-          1
-      ],
-      'lightgrey': [
-          211,
-          211,
-          211,
-          1
-      ],
-      'lightpink': [
-          255,
-          182,
-          193,
-          1
-      ],
-      'lightsalmon': [
-          255,
-          160,
-          122,
-          1
-      ],
-      'lightseagreen': [
-          32,
-          178,
-          170,
-          1
-      ],
-      'lightskyblue': [
-          135,
-          206,
-          250,
-          1
-      ],
-      'lightslategray': [
-          119,
-          136,
-          153,
-          1
-      ],
-      'lightslategrey': [
-          119,
-          136,
-          153,
-          1
-      ],
-      'lightsteelblue': [
-          176,
-          196,
-          222,
-          1
-      ],
-      'lightyellow': [
-          255,
-          255,
-          224,
-          1
-      ],
-      'lime': [
-          0,
-          255,
-          0,
-          1
-      ],
-      'limegreen': [
-          50,
-          205,
-          50,
-          1
-      ],
-      'linen': [
-          250,
-          240,
-          230,
-          1
-      ],
-      'magenta': [
-          255,
-          0,
-          255,
-          1
-      ],
-      'maroon': [
-          128,
-          0,
-          0,
-          1
-      ],
-      'mediumaquamarine': [
-          102,
-          205,
-          170,
-          1
-      ],
-      'mediumblue': [
-          0,
-          0,
-          205,
-          1
-      ],
-      'mediumorchid': [
-          186,
-          85,
-          211,
-          1
-      ],
-      'mediumpurple': [
-          147,
-          112,
-          219,
-          1
-      ],
-      'mediumseagreen': [
-          60,
-          179,
-          113,
-          1
-      ],
-      'mediumslateblue': [
-          123,
-          104,
-          238,
-          1
-      ],
-      'mediumspringgreen': [
-          0,
-          250,
-          154,
-          1
-      ],
-      'mediumturquoise': [
-          72,
-          209,
-          204,
-          1
-      ],
-      'mediumvioletred': [
-          199,
-          21,
-          133,
-          1
-      ],
-      'midnightblue': [
-          25,
-          25,
-          112,
-          1
-      ],
-      'mintcream': [
-          245,
-          255,
-          250,
-          1
-      ],
-      'mistyrose': [
-          255,
-          228,
-          225,
-          1
-      ],
-      'moccasin': [
-          255,
-          228,
-          181,
-          1
-      ],
-      'navajowhite': [
-          255,
-          222,
-          173,
-          1
-      ],
-      'navy': [
-          0,
-          0,
-          128,
-          1
-      ],
-      'oldlace': [
-          253,
-          245,
-          230,
-          1
-      ],
-      'olive': [
-          128,
-          128,
-          0,
-          1
-      ],
-      'olivedrab': [
-          107,
-          142,
-          35,
-          1
-      ],
-      'orange': [
-          255,
-          165,
-          0,
-          1
-      ],
-      'orangered': [
-          255,
-          69,
-          0,
-          1
-      ],
-      'orchid': [
-          218,
-          112,
-          214,
-          1
-      ],
-      'palegoldenrod': [
-          238,
-          232,
-          170,
-          1
-      ],
-      'palegreen': [
-          152,
-          251,
-          152,
-          1
-      ],
-      'paleturquoise': [
-          175,
-          238,
-          238,
-          1
-      ],
-      'palevioletred': [
-          219,
-          112,
-          147,
-          1
-      ],
-      'papayawhip': [
-          255,
-          239,
-          213,
-          1
-      ],
-      'peachpuff': [
-          255,
-          218,
-          185,
-          1
-      ],
-      'peru': [
-          205,
-          133,
-          63,
-          1
-      ],
-      'pink': [
-          255,
-          192,
-          203,
-          1
-      ],
-      'plum': [
-          221,
-          160,
-          221,
-          1
-      ],
-      'powderblue': [
-          176,
-          224,
-          230,
-          1
-      ],
-      'purple': [
-          128,
-          0,
-          128,
-          1
-      ],
-      'rebeccapurple': [
-          102,
-          51,
-          153,
-          1
-      ],
-      'red': [
-          255,
-          0,
-          0,
-          1
-      ],
-      'rosybrown': [
-          188,
-          143,
-          143,
-          1
-      ],
-      'royalblue': [
-          65,
-          105,
-          225,
-          1
-      ],
-      'saddlebrown': [
-          139,
-          69,
-          19,
-          1
-      ],
-      'salmon': [
-          250,
-          128,
-          114,
-          1
-      ],
-      'sandybrown': [
-          244,
-          164,
-          96,
-          1
-      ],
-      'seagreen': [
-          46,
-          139,
-          87,
-          1
-      ],
-      'seashell': [
-          255,
-          245,
-          238,
-          1
-      ],
-      'sienna': [
-          160,
-          82,
-          45,
-          1
-      ],
-      'silver': [
-          192,
-          192,
-          192,
-          1
-      ],
-      'skyblue': [
-          135,
-          206,
-          235,
-          1
-      ],
-      'slateblue': [
-          106,
-          90,
-          205,
-          1
-      ],
-      'slategray': [
-          112,
-          128,
-          144,
-          1
-      ],
-      'slategrey': [
-          112,
-          128,
-          144,
-          1
-      ],
-      'snow': [
-          255,
-          250,
-          250,
-          1
-      ],
-      'springgreen': [
-          0,
-          255,
-          127,
-          1
-      ],
-      'steelblue': [
-          70,
-          130,
-          180,
-          1
-      ],
-      'tan': [
-          210,
-          180,
-          140,
-          1
-      ],
-      'teal': [
-          0,
-          128,
-          128,
-          1
-      ],
-      'thistle': [
-          216,
-          191,
-          216,
-          1
-      ],
-      'tomato': [
-          255,
-          99,
-          71,
-          1
-      ],
-      'turquoise': [
-          64,
-          224,
-          208,
-          1
-      ],
-      'violet': [
-          238,
-          130,
-          238,
-          1
-      ],
-      'wheat': [
-          245,
-          222,
-          179,
-          1
-      ],
-      'white': [
-          255,
-          255,
-          255,
-          1
-      ],
-      'whitesmoke': [
-          245,
-          245,
-          245,
-          1
-      ],
-      'yellow': [
-          255,
-          255,
-          0,
-          1
-      ],
-      'yellowgreen': [
-          154,
-          205,
-          50,
-          1
-      ]
-  };
-  function clamp_css_byte(i) {
-      i = Math.round(i);
-      return i < 0 ? 0 : i > 255 ? 255 : i;
+    "transparent": [0,0,0,0], "aliceblue": [240,248,255,1],
+    "antiquewhite": [250,235,215,1], "aqua": [0,255,255,1],
+    "aquamarine": [127,255,212,1], "azure": [240,255,255,1],
+    "beige": [245,245,220,1], "bisque": [255,228,196,1],
+    "black": [0,0,0,1], "blanchedalmond": [255,235,205,1],
+    "blue": [0,0,255,1], "blueviolet": [138,43,226,1],
+    "brown": [165,42,42,1], "burlywood": [222,184,135,1],
+    "cadetblue": [95,158,160,1], "chartreuse": [127,255,0,1],
+    "chocolate": [210,105,30,1], "coral": [255,127,80,1],
+    "cornflowerblue": [100,149,237,1], "cornsilk": [255,248,220,1],
+    "crimson": [220,20,60,1], "cyan": [0,255,255,1],
+    "darkblue": [0,0,139,1], "darkcyan": [0,139,139,1],
+    "darkgoldenrod": [184,134,11,1], "darkgray": [169,169,169,1],
+    "darkgreen": [0,100,0,1], "darkgrey": [169,169,169,1],
+    "darkkhaki": [189,183,107,1], "darkmagenta": [139,0,139,1],
+    "darkolivegreen": [85,107,47,1], "darkorange": [255,140,0,1],
+    "darkorchid": [153,50,204,1], "darkred": [139,0,0,1],
+    "darksalmon": [233,150,122,1], "darkseagreen": [143,188,143,1],
+    "darkslateblue": [72,61,139,1], "darkslategray": [47,79,79,1],
+    "darkslategrey": [47,79,79,1], "darkturquoise": [0,206,209,1],
+    "darkviolet": [148,0,211,1], "deeppink": [255,20,147,1],
+    "deepskyblue": [0,191,255,1], "dimgray": [105,105,105,1],
+    "dimgrey": [105,105,105,1], "dodgerblue": [30,144,255,1],
+    "firebrick": [178,34,34,1], "floralwhite": [255,250,240,1],
+    "forestgreen": [34,139,34,1], "fuchsia": [255,0,255,1],
+    "gainsboro": [220,220,220,1], "ghostwhite": [248,248,255,1],
+    "gold": [255,215,0,1], "goldenrod": [218,165,32,1],
+    "gray": [128,128,128,1], "green": [0,128,0,1],
+    "greenyellow": [173,255,47,1], "grey": [128,128,128,1],
+    "honeydew": [240,255,240,1], "hotpink": [255,105,180,1],
+    "indianred": [205,92,92,1], "indigo": [75,0,130,1],
+    "ivory": [255,255,240,1], "khaki": [240,230,140,1],
+    "lavender": [230,230,250,1], "lavenderblush": [255,240,245,1],
+    "lawngreen": [124,252,0,1], "lemonchiffon": [255,250,205,1],
+    "lightblue": [173,216,230,1], "lightcoral": [240,128,128,1],
+    "lightcyan": [224,255,255,1], "lightgoldenrodyellow": [250,250,210,1],
+    "lightgray": [211,211,211,1], "lightgreen": [144,238,144,1],
+    "lightgrey": [211,211,211,1], "lightpink": [255,182,193,1],
+    "lightsalmon": [255,160,122,1], "lightseagreen": [32,178,170,1],
+    "lightskyblue": [135,206,250,1], "lightslategray": [119,136,153,1],
+    "lightslategrey": [119,136,153,1], "lightsteelblue": [176,196,222,1],
+    "lightyellow": [255,255,224,1], "lime": [0,255,0,1],
+    "limegreen": [50,205,50,1], "linen": [250,240,230,1],
+    "magenta": [255,0,255,1], "maroon": [128,0,0,1],
+    "mediumaquamarine": [102,205,170,1], "mediumblue": [0,0,205,1],
+    "mediumorchid": [186,85,211,1], "mediumpurple": [147,112,219,1],
+    "mediumseagreen": [60,179,113,1], "mediumslateblue": [123,104,238,1],
+    "mediumspringgreen": [0,250,154,1], "mediumturquoise": [72,209,204,1],
+    "mediumvioletred": [199,21,133,1], "midnightblue": [25,25,112,1],
+    "mintcream": [245,255,250,1], "mistyrose": [255,228,225,1],
+    "moccasin": [255,228,181,1], "navajowhite": [255,222,173,1],
+    "navy": [0,0,128,1], "oldlace": [253,245,230,1],
+    "olive": [128,128,0,1], "olivedrab": [107,142,35,1],
+    "orange": [255,165,0,1], "orangered": [255,69,0,1],
+    "orchid": [218,112,214,1], "palegoldenrod": [238,232,170,1],
+    "palegreen": [152,251,152,1], "paleturquoise": [175,238,238,1],
+    "palevioletred": [219,112,147,1], "papayawhip": [255,239,213,1],
+    "peachpuff": [255,218,185,1], "peru": [205,133,63,1],
+    "pink": [255,192,203,1], "plum": [221,160,221,1],
+    "powderblue": [176,224,230,1], "purple": [128,0,128,1],
+    "rebeccapurple": [102,51,153,1],
+    "red": [255,0,0,1], "rosybrown": [188,143,143,1],
+    "royalblue": [65,105,225,1], "saddlebrown": [139,69,19,1],
+    "salmon": [250,128,114,1], "sandybrown": [244,164,96,1],
+    "seagreen": [46,139,87,1], "seashell": [255,245,238,1],
+    "sienna": [160,82,45,1], "silver": [192,192,192,1],
+    "skyblue": [135,206,235,1], "slateblue": [106,90,205,1],
+    "slategray": [112,128,144,1], "slategrey": [112,128,144,1],
+    "snow": [255,250,250,1], "springgreen": [0,255,127,1],
+    "steelblue": [70,130,180,1], "tan": [210,180,140,1],
+    "teal": [0,128,128,1], "thistle": [216,191,216,1],
+    "tomato": [255,99,71,1], "turquoise": [64,224,208,1],
+    "violet": [238,130,238,1], "wheat": [245,222,179,1],
+    "white": [255,255,255,1], "whitesmoke": [245,245,245,1],
+    "yellow": [255,255,0,1], "yellowgreen": [154,205,50,1]};
+
+  function clamp_css_byte(i) {  // Clamp to integer 0 .. 255.
+    i = Math.round(i);  // Seems to be what Chrome does (vs truncation).
+    return i < 0 ? 0 : i > 255 ? 255 : i;
   }
-  function clamp_css_float(f) {
-      return f < 0 ? 0 : f > 1 ? 1 : f;
+
+  function clamp_css_float(f) {  // Clamp to float 0.0 .. 1.0.
+    return f < 0 ? 0 : f > 1 ? 1 : f;
   }
-  function parse_css_int(str) {
-      if (str[str.length - 1] === '%')
-          return clamp_css_byte(parseFloat(str) / 100 * 255);
-      return clamp_css_byte(parseInt(str));
+
+  function parse_css_int(str) {  // int or percentage.
+    if (str[str.length - 1] === '%')
+      return clamp_css_byte(parseFloat(str) / 100 * 255);
+    return clamp_css_byte(parseInt(str));
   }
-  function parse_css_float(str) {
-      if (str[str.length - 1] === '%')
-          return clamp_css_float(parseFloat(str) / 100);
-      return clamp_css_float(parseFloat(str));
+
+  function parse_css_float(str) {  // float or percentage.
+    if (str[str.length - 1] === '%')
+      return clamp_css_float(parseFloat(str) / 100);
+    return clamp_css_float(parseFloat(str));
   }
+
   function css_hue_to_rgb(m1, m2, h) {
-      if (h < 0)
-          h += 1;
-      else if (h > 1)
-          h -= 1;
-      if (h * 6 < 1)
-          return m1 + (m2 - m1) * h * 6;
-      if (h * 2 < 1)
-          return m2;
-      if (h * 3 < 2)
-          return m1 + (m2 - m1) * (2 / 3 - h) * 6;
-      return m1;
+    if (h < 0) h += 1;
+    else if (h > 1) h -= 1;
+
+    if (h * 6 < 1) return m1 + (m2 - m1) * h * 6;
+    if (h * 2 < 1) return m2;
+    if (h * 3 < 2) return m1 + (m2 - m1) * (2/3 - h) * 6;
+    return m1;
   }
+
   function parseCSSColor(css_str) {
-      var str = css_str.replace(/ /g, '').toLowerCase();
-      if (str in kCSSColorTable)
-          return kCSSColorTable[str].slice();
-      if (str[0] === '#') {
-          if (str.length === 4) {
-              var iv = parseInt(str.substr(1), 16);
-              if (!(iv >= 0 && iv <= 4095))
-                  return null;
-              return [
-                  (iv & 3840) >> 4 | (iv & 3840) >> 8,
-                  iv & 240 | (iv & 240) >> 4,
-                  iv & 15 | (iv & 15) << 4,
-                  1
-              ];
-          } else if (str.length === 7) {
-              var iv = parseInt(str.substr(1), 16);
-              if (!(iv >= 0 && iv <= 16777215))
-                  return null;
-              return [
-                  (iv & 16711680) >> 16,
-                  (iv & 65280) >> 8,
-                  iv & 255,
-                  1
-              ];
-          }
-          return null;
+    // Remove all whitespace, not compliant, but should just be more accepting.
+    var str = css_str.replace(/ /g, '').toLowerCase();
+
+    // Color keywords (and transparent) lookup.
+    if (str in kCSSColorTable) return kCSSColorTable[str].slice();  // dup.
+
+    // #abc and #abc123 syntax.
+    if (str[0] === '#') {
+      if (str.length === 4) {
+        var iv = parseInt(str.substr(1), 16);  // TODO(deanm): Stricter parsing.
+        if (!(iv >= 0 && iv <= 0xfff)) return null;  // Covers NaN.
+        return [((iv & 0xf00) >> 4) | ((iv & 0xf00) >> 8),
+                (iv & 0xf0) | ((iv & 0xf0) >> 4),
+                (iv & 0xf) | ((iv & 0xf) << 4),
+                1];
+      } else if (str.length === 7) {
+        var iv = parseInt(str.substr(1), 16);  // TODO(deanm): Stricter parsing.
+        if (!(iv >= 0 && iv <= 0xffffff)) return null;  // Covers NaN.
+        return [(iv & 0xff0000) >> 16,
+                (iv & 0xff00) >> 8,
+                iv & 0xff,
+                1];
       }
-      var op = str.indexOf('('), ep = str.indexOf(')');
-      if (op !== -1 && ep + 1 === str.length) {
-          var fname = str.substr(0, op);
-          var params = str.substr(op + 1, ep - (op + 1)).split(',');
-          var alpha = 1;
-          switch (fname) {
-          case 'rgba':
-              if (params.length !== 4)
-                  return null;
-              alpha = parse_css_float(params.pop());
-          case 'rgb':
-              if (params.length !== 3)
-                  return null;
-              return [
-                  parse_css_int(params[0]),
+
+      return null;
+    }
+
+    var op = str.indexOf('('), ep = str.indexOf(')');
+    if (op !== -1 && ep + 1 === str.length) {
+      var fname = str.substr(0, op);
+      var params = str.substr(op+1, ep-(op+1)).split(',');
+      var alpha = 1;  // To allow case fallthrough.
+      switch (fname) {
+        case 'rgba':
+          if (params.length !== 4) return null;
+          alpha = parse_css_float(params.pop());
+          // Fall through.
+        case 'rgb':
+          if (params.length !== 3) return null;
+          return [parse_css_int(params[0]),
                   parse_css_int(params[1]),
                   parse_css_int(params[2]),
-                  alpha
-              ];
-          case 'hsla':
-              if (params.length !== 4)
-                  return null;
-              alpha = parse_css_float(params.pop());
-          case 'hsl':
-              if (params.length !== 3)
-                  return null;
-              var h = (parseFloat(params[0]) % 360 + 360) % 360 / 360;
-              var s = parse_css_float(params[1]);
-              var l = parse_css_float(params[2]);
-              var m2 = l <= 0.5 ? l * (s + 1) : l + s - l * s;
-              var m1 = l * 2 - m2;
-              return [
-                  clamp_css_byte(css_hue_to_rgb(m1, m2, h + 1 / 3) * 255),
+                  alpha];
+        case 'hsla':
+          if (params.length !== 4) return null;
+          alpha = parse_css_float(params.pop());
+          // Fall through.
+        case 'hsl':
+          if (params.length !== 3) return null;
+          var h = (((parseFloat(params[0]) % 360) + 360) % 360) / 360;  // 0 .. 1
+          // NOTE(deanm): According to the CSS spec s/l should only be
+          // percentages, but we don't bother and let float or percentage.
+          var s = parse_css_float(params[1]);
+          var l = parse_css_float(params[2]);
+          var m2 = l <= 0.5 ? l * (s + 1) : l + s - l * s;
+          var m1 = l * 2 - m2;
+          return [clamp_css_byte(css_hue_to_rgb(m1, m2, h+1/3) * 255),
                   clamp_css_byte(css_hue_to_rgb(m1, m2, h) * 255),
-                  clamp_css_byte(css_hue_to_rgb(m1, m2, h - 1 / 3) * 255),
-                  alpha
-              ];
-          default:
-              return null;
-          }
+                  clamp_css_byte(css_hue_to_rgb(m1, m2, h-1/3) * 255),
+                  alpha];
+        default:
+          return null;
       }
-      return null;
+    }
+
+    return null;
   }
-  try {
-      exports.parseCSSColor = parseCSSColor;
-  } catch (e) {
-  }
+
+  try { exports.parseCSSColor = parseCSSColor; } catch(e) { }
   });
 
   class Color {
@@ -11093,62 +10325,108 @@
   }
   var Step$1 = Step;
 
+  /*
+   * Copyright (C) 2008 Apple Inc. All Rights Reserved.
+   *
+   * Redistribution and use in source and binary forms, with or without
+   * modification, are permitted provided that the following conditions
+   * are met:
+   * 1. Redistributions of source code must retain the above copyright
+   *    notice, this list of conditions and the following disclaimer.
+   * 2. Redistributions in binary form must reproduce the above copyright
+   *    notice, this list of conditions and the following disclaimer in the
+   *    documentation and/or other materials provided with the distribution.
+   *
+   * THIS SOFTWARE IS PROVIDED BY APPLE INC. ``AS IS'' AND ANY
+   * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+   * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+   * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL APPLE INC. OR
+   * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+   * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+   * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+   * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
+   * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+   * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+   * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+   *
+   * Ported from Webkit
+   * http://svn.webkit.org/repository/webkit/trunk/Source/WebCore/platform/graphics/UnitBezier.h
+   */
   var unitbezier = UnitBezier;
+
   function UnitBezier(p1x, p1y, p2x, p2y) {
-      this.cx = 3 * p1x;
-      this.bx = 3 * (p2x - p1x) - this.cx;
-      this.ax = 1 - this.cx - this.bx;
-      this.cy = 3 * p1y;
-      this.by = 3 * (p2y - p1y) - this.cy;
-      this.ay = 1 - this.cy - this.by;
+      // Calculate the polynomial coefficients, implicit first and last control points are (0,0) and (1,1).
+      this.cx = 3.0 * p1x;
+      this.bx = 3.0 * (p2x - p1x) - this.cx;
+      this.ax = 1.0 - this.cx - this.bx;
+
+      this.cy = 3.0 * p1y;
+      this.by = 3.0 * (p2y - p1y) - this.cy;
+      this.ay = 1.0 - this.cy - this.by;
+
       this.p1x = p1x;
       this.p1y = p2y;
       this.p2x = p2x;
       this.p2y = p2y;
   }
-  UnitBezier.prototype.sampleCurveX = function (t) {
+
+  UnitBezier.prototype.sampleCurveX = function(t) {
+      // `ax t^3 + bx t^2 + cx t' expanded using Horner's rule.
       return ((this.ax * t + this.bx) * t + this.cx) * t;
   };
-  UnitBezier.prototype.sampleCurveY = function (t) {
+
+  UnitBezier.prototype.sampleCurveY = function(t) {
       return ((this.ay * t + this.by) * t + this.cy) * t;
   };
-  UnitBezier.prototype.sampleCurveDerivativeX = function (t) {
-      return (3 * this.ax * t + 2 * this.bx) * t + this.cx;
+
+  UnitBezier.prototype.sampleCurveDerivativeX = function(t) {
+      return (3.0 * this.ax * t + 2.0 * this.bx) * t + this.cx;
   };
-  UnitBezier.prototype.solveCurveX = function (x, epsilon) {
-      if (typeof epsilon === 'undefined')
-          epsilon = 0.000001;
+
+  UnitBezier.prototype.solveCurveX = function(x, epsilon) {
+      if (typeof epsilon === 'undefined') epsilon = 1e-6;
+
       var t0, t1, t2, x2, i;
+
+      // First try a few iterations of Newton's method -- normally very fast.
       for (t2 = x, i = 0; i < 8; i++) {
+
           x2 = this.sampleCurveX(t2) - x;
-          if (Math.abs(x2) < epsilon)
-              return t2;
+          if (Math.abs(x2) < epsilon) return t2;
+
           var d2 = this.sampleCurveDerivativeX(t2);
-          if (Math.abs(d2) < 0.000001)
-              break;
+          if (Math.abs(d2) < 1e-6) break;
+
           t2 = t2 - x2 / d2;
       }
-      t0 = 0;
-      t1 = 1;
+
+      // Fall back to the bisection method for reliability.
+      t0 = 0.0;
+      t1 = 1.0;
       t2 = x;
-      if (t2 < t0)
-          return t0;
-      if (t2 > t1)
-          return t1;
+
+      if (t2 < t0) return t0;
+      if (t2 > t1) return t1;
+
       while (t0 < t1) {
+
           x2 = this.sampleCurveX(t2);
-          if (Math.abs(x2 - x) < epsilon)
-              return t2;
+          if (Math.abs(x2 - x) < epsilon) return t2;
+
           if (x > x2) {
               t0 = t2;
           } else {
               t1 = t2;
           }
+
           t2 = (t1 - t0) * 0.5 + t0;
       }
+
+      // Failure.
       return t2;
   };
-  UnitBezier.prototype.solve = function (x, epsilon) {
+
+  UnitBezier.prototype.solve = function(x, epsilon) {
       return this.sampleCurveY(this.solveCurveX(x, epsilon));
   };
 
@@ -15646,956 +14924,662 @@ ${ JSON.stringify(filterExp, null, 2) }
       return errors.slice().sort((a, b) => a.line && b.line ? a.line - b.line : 0);
   }
 
+  /* parser generated by jison 0.4.15 */
+
   var jsonlint = createCommonjsModule(function (module, exports) {
-  var parser = function () {
-      var o = function (k, v, o, l) {
-              for (o = o || {}, l = k.length; l--; o[k[l]] = v);
-              return o;
-          }, $V0 = [
-              1,
-              12
-          ], $V1 = [
-              1,
-              13
-          ], $V2 = [
-              1,
-              9
-          ], $V3 = [
-              1,
-              10
-          ], $V4 = [
-              1,
-              11
-          ], $V5 = [
-              1,
-              14
-          ], $V6 = [
-              1,
-              15
-          ], $V7 = [
-              14,
-              18,
-              22,
-              24
-          ], $V8 = [
-              18,
-              22
-          ], $V9 = [
-              22,
-              24
-          ];
-      var parser = {
-          trace: function trace() {
+  /*
+    Returns a Parser object of the following structure:
+
+    Parser: {
+      yy: {}
+    }
+
+    Parser.prototype: {
+      yy: {},
+      trace: function(),
+      symbols_: {associative list: name ==> number},
+      terminals_: {associative list: number ==> name},
+      productions_: [...],
+      performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate, $$, _$),
+      table: [...],
+      defaultActions: {...},
+      parseError: function(str, hash),
+      parse: function(input),
+
+      lexer: {
+          EOF: 1,
+          parseError: function(str, hash),
+          setInput: function(input),
+          input: function(),
+          unput: function(str),
+          more: function(),
+          less: function(n),
+          pastInput: function(),
+          upcomingInput: function(),
+          showPosition: function(),
+          test_match: function(regex_match_array, rule_index),
+          next: function(),
+          lex: function(),
+          begin: function(condition),
+          popState: function(),
+          _currentRules: function(),
+          topState: function(),
+          pushState: function(condition),
+
+          options: {
+              ranges: boolean           (optional: true ==> token location info will include a .range[] member)
+              flex: boolean             (optional: true ==> flex-like lexing behaviour where the rules are tested exhaustively to find the longest match)
+              backtrack_lexer: boolean  (optional: true ==> lexer regexes are tested in order and for each matching regex the action code is invoked; the lexer terminates the scan when a token is returned by the action code)
           },
-          yy: {},
-          symbols_: {
-              'error': 2,
-              'JSONString': 3,
-              'STRING': 4,
-              'JSONNumber': 5,
-              'NUMBER': 6,
-              'JSONNullLiteral': 7,
-              'NULL': 8,
-              'JSONBooleanLiteral': 9,
-              'TRUE': 10,
-              'FALSE': 11,
-              'JSONText': 12,
-              'JSONValue': 13,
-              'EOF': 14,
-              'JSONObject': 15,
-              'JSONArray': 16,
-              '{': 17,
-              '}': 18,
-              'JSONMemberList': 19,
-              'JSONMember': 20,
-              ':': 21,
-              ',': 22,
-              '[': 23,
-              ']': 24,
-              'JSONElementList': 25,
-              '$accept': 0,
-              '$end': 1
-          },
-          terminals_: {
-              2: 'error',
-              4: 'STRING',
-              6: 'NUMBER',
-              8: 'NULL',
-              10: 'TRUE',
-              11: 'FALSE',
-              14: 'EOF',
-              17: '{',
-              18: '}',
-              21: ':',
-              22: ',',
-              23: '[',
-              24: ']'
-          },
-          productions_: [
-              0,
-              [
-                  3,
-                  1
-              ],
-              [
-                  5,
-                  1
-              ],
-              [
-                  7,
-                  1
-              ],
-              [
-                  9,
-                  1
-              ],
-              [
-                  9,
-                  1
-              ],
-              [
-                  12,
-                  2
-              ],
-              [
-                  13,
-                  1
-              ],
-              [
-                  13,
-                  1
-              ],
-              [
-                  13,
-                  1
-              ],
-              [
-                  13,
-                  1
-              ],
-              [
-                  13,
-                  1
-              ],
-              [
-                  13,
-                  1
-              ],
-              [
-                  15,
-                  2
-              ],
-              [
-                  15,
-                  3
-              ],
-              [
-                  20,
-                  3
-              ],
-              [
-                  19,
-                  1
-              ],
-              [
-                  19,
-                  3
-              ],
-              [
-                  16,
-                  2
-              ],
-              [
-                  16,
-                  3
-              ],
-              [
-                  25,
-                  1
-              ],
-              [
-                  25,
-                  3
-              ]
-          ],
-          performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate, $$, _$) {
-              var $0 = $$.length - 1;
-              switch (yystate) {
-              case 1:
-                  this.$ = new String(yytext.replace(/\\(\\|")/g, '$' + '1').replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\t/g, '\t').replace(/\\v/g, '\x0B').replace(/\\f/g, '\f').replace(/\\b/g, '\b'));
-                  this.$.__line__ = this._$.first_line;
-                  break;
-              case 2:
-                  this.$ = new Number(yytext);
-                  this.$.__line__ = this._$.first_line;
-                  break;
-              case 3:
-                  this.$ = null;
-                  break;
-              case 4:
-                  this.$ = new Boolean(true);
-                  this.$.__line__ = this._$.first_line;
-                  break;
-              case 5:
-                  this.$ = new Boolean(false);
-                  this.$.__line__ = this._$.first_line;
-                  break;
-              case 6:
-                  return this.$ = $$[$0 - 1];
-              case 13:
-                  this.$ = {};
-                  Object.defineProperty(this.$, '__line__', {
-                      value: this._$.first_line,
-                      enumerable: false
-                  });
-                  break;
-              case 14:
-              case 19:
-                  this.$ = $$[$0 - 1];
-                  Object.defineProperty(this.$, '__line__', {
-                      value: this._$.first_line,
-                      enumerable: false
-                  });
-                  break;
-              case 15:
-                  this.$ = [
-                      $$[$0 - 2],
-                      $$[$0]
-                  ];
-                  break;
-              case 16:
-                  this.$ = {};
-                  this.$[$$[$0][0]] = $$[$0][1];
-                  break;
-              case 17:
-                  this.$ = $$[$0 - 2];
-                  $$[$0 - 2][$$[$0][0]] = $$[$0][1];
-                  break;
-              case 18:
-                  this.$ = [];
-                  Object.defineProperty(this.$, '__line__', {
-                      value: this._$.first_line,
-                      enumerable: false
-                  });
-                  break;
-              case 20:
-                  this.$ = [$$[$0]];
-                  break;
-              case 21:
-                  this.$ = $$[$0 - 2];
-                  $$[$0 - 2].push($$[$0]);
-                  break;
+
+          performAction: function(yy, yy_, $avoiding_name_collisions, YY_START),
+          rules: [...],
+          conditions: {associative list: name ==> set},
+      }
+    }
+
+
+    token location info (@$, _$, etc.): {
+      first_line: n,
+      last_line: n,
+      first_column: n,
+      last_column: n,
+      range: [start_number, end_number]       (where the numbers are indexes into the input string, regular zero-based)
+    }
+
+
+    the parseError function receives a 'hash' object with these members for lexer and parser errors: {
+      text:        (matched text)
+      token:       (the produced terminal token, if any)
+      line:        (yylineno)
+    }
+    while parser (grammar) errors will also provide these members, i.e. parser errors deliver a superset of attributes: {
+      loc:         (yylloc)
+      expected:    (string describing the set of expected tokens)
+      recoverable: (boolean: TRUE when the parser has a error recovery rule available for this particular error)
+    }
+  */
+  var parser = (function(){
+  var o=function(k,v,o,l){for(o=o||{},l=k.length;l--;o[k[l]]=v);return o},$V0=[1,12],$V1=[1,13],$V2=[1,9],$V3=[1,10],$V4=[1,11],$V5=[1,14],$V6=[1,15],$V7=[14,18,22,24],$V8=[18,22],$V9=[22,24];
+  var parser = {trace: function trace() { },
+  yy: {},
+  symbols_: {"error":2,"JSONString":3,"STRING":4,"JSONNumber":5,"NUMBER":6,"JSONNullLiteral":7,"NULL":8,"JSONBooleanLiteral":9,"TRUE":10,"FALSE":11,"JSONText":12,"JSONValue":13,"EOF":14,"JSONObject":15,"JSONArray":16,"{":17,"}":18,"JSONMemberList":19,"JSONMember":20,":":21,",":22,"[":23,"]":24,"JSONElementList":25,"$accept":0,"$end":1},
+  terminals_: {2:"error",4:"STRING",6:"NUMBER",8:"NULL",10:"TRUE",11:"FALSE",14:"EOF",17:"{",18:"}",21:":",22:",",23:"[",24:"]"},
+  productions_: [0,[3,1],[5,1],[7,1],[9,1],[9,1],[12,2],[13,1],[13,1],[13,1],[13,1],[13,1],[13,1],[15,2],[15,3],[20,3],[19,1],[19,3],[16,2],[16,3],[25,1],[25,3]],
+  performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate /* action[1] */, $$ /* vstack */, _$ /* lstack */) {
+  /* this == yyval */
+
+  var $0 = $$.length - 1;
+  switch (yystate) {
+  case 1:
+   // replace escaped characters with actual character
+            this.$ = new String(yytext.replace(/\\(\\|")/g, "$"+"1")
+                       .replace(/\\n/g,'\n')
+                       .replace(/\\r/g,'\r')
+                       .replace(/\\t/g,'\t')
+                       .replace(/\\v/g,'\v')
+                       .replace(/\\f/g,'\f')
+                       .replace(/\\b/g,'\b'));
+            this.$.__line__ =  this._$.first_line;
+          
+  break;
+  case 2:
+
+              this.$ = new Number(yytext);
+              this.$.__line__ =  this._$.first_line;
+          
+  break;
+  case 3:
+
+              this.$ = null;
+          
+  break;
+  case 4:
+
+              this.$ = new Boolean(true);
+              this.$.__line__ = this._$.first_line;
+          
+  break;
+  case 5:
+
+              this.$ = new Boolean(false);
+              this.$.__line__ = this._$.first_line;
+          
+  break;
+  case 6:
+  return this.$ = $$[$0-1];
+  case 13:
+  this.$ = {}; Object.defineProperty(this.$, '__line__', {
+              value: this._$.first_line,
+              enumerable: false
+          });
+  break;
+  case 14: case 19:
+  this.$ = $$[$0-1]; Object.defineProperty(this.$, '__line__', {
+              value: this._$.first_line,
+              enumerable: false
+          });
+  break;
+  case 15:
+  this.$ = [$$[$0-2], $$[$0]];
+  break;
+  case 16:
+  this.$ = {}; this.$[$$[$0][0]] = $$[$0][1];
+  break;
+  case 17:
+  this.$ = $$[$0-2]; $$[$0-2][$$[$0][0]] = $$[$0][1];
+  break;
+  case 18:
+  this.$ = []; Object.defineProperty(this.$, '__line__', {
+              value: this._$.first_line,
+              enumerable: false
+          });
+  break;
+  case 20:
+  this.$ = [$$[$0]];
+  break;
+  case 21:
+  this.$ = $$[$0-2]; $$[$0-2].push($$[$0]);
+  break;
+  }
+  },
+  table: [{3:5,4:$V0,5:6,6:$V1,7:3,8:$V2,9:4,10:$V3,11:$V4,12:1,13:2,15:7,16:8,17:$V5,23:$V6},{1:[3]},{14:[1,16]},o($V7,[2,7]),o($V7,[2,8]),o($V7,[2,9]),o($V7,[2,10]),o($V7,[2,11]),o($V7,[2,12]),o($V7,[2,3]),o($V7,[2,4]),o($V7,[2,5]),o([14,18,21,22,24],[2,1]),o($V7,[2,2]),{3:20,4:$V0,18:[1,17],19:18,20:19},{3:5,4:$V0,5:6,6:$V1,7:3,8:$V2,9:4,10:$V3,11:$V4,13:23,15:7,16:8,17:$V5,23:$V6,24:[1,21],25:22},{1:[2,6]},o($V7,[2,13]),{18:[1,24],22:[1,25]},o($V8,[2,16]),{21:[1,26]},o($V7,[2,18]),{22:[1,28],24:[1,27]},o($V9,[2,20]),o($V7,[2,14]),{3:20,4:$V0,20:29},{3:5,4:$V0,5:6,6:$V1,7:3,8:$V2,9:4,10:$V3,11:$V4,13:30,15:7,16:8,17:$V5,23:$V6},o($V7,[2,19]),{3:5,4:$V0,5:6,6:$V1,7:3,8:$V2,9:4,10:$V3,11:$V4,13:31,15:7,16:8,17:$V5,23:$V6},o($V8,[2,17]),o($V8,[2,15]),o($V9,[2,21])],
+  defaultActions: {16:[2,6]},
+  parseError: function parseError(str, hash) {
+      if (hash.recoverable) {
+          this.trace(str);
+      } else {
+          throw new Error(str);
+      }
+  },
+  parse: function parse(input) {
+      var self = this, stack = [0], vstack = [null], lstack = [], table = this.table, yytext = '', yylineno = 0, yyleng = 0, TERROR = 2, EOF = 1;
+      var args = lstack.slice.call(arguments, 1);
+      var lexer = Object.create(this.lexer);
+      var sharedState = { yy: {} };
+      for (var k in this.yy) {
+          if (Object.prototype.hasOwnProperty.call(this.yy, k)) {
+              sharedState.yy[k] = this.yy[k];
+          }
+      }
+      lexer.setInput(input, sharedState.yy);
+      sharedState.yy.lexer = lexer;
+      sharedState.yy.parser = this;
+      if (typeof lexer.yylloc == 'undefined') {
+          lexer.yylloc = {};
+      }
+      var yyloc = lexer.yylloc;
+      lstack.push(yyloc);
+      var ranges = lexer.options && lexer.options.ranges;
+      if (typeof sharedState.yy.parseError === 'function') {
+          this.parseError = sharedState.yy.parseError;
+      } else {
+          this.parseError = Object.getPrototypeOf(this).parseError;
+      }
+      
+          function lex() {
+              var token;
+              token = lexer.lex() || EOF;
+              if (typeof token !== 'number') {
+                  token = self.symbols_[token] || token;
               }
-          },
-          table: [
-              {
-                  3: 5,
-                  4: $V0,
-                  5: 6,
-                  6: $V1,
-                  7: 3,
-                  8: $V2,
-                  9: 4,
-                  10: $V3,
-                  11: $V4,
-                  12: 1,
-                  13: 2,
-                  15: 7,
-                  16: 8,
-                  17: $V5,
-                  23: $V6
-              },
-              { 1: [3] },
-              {
-                  14: [
-                      1,
-                      16
-                  ]
-              },
-              o($V7, [
-                  2,
-                  7
-              ]),
-              o($V7, [
-                  2,
-                  8
-              ]),
-              o($V7, [
-                  2,
-                  9
-              ]),
-              o($V7, [
-                  2,
-                  10
-              ]),
-              o($V7, [
-                  2,
-                  11
-              ]),
-              o($V7, [
-                  2,
-                  12
-              ]),
-              o($V7, [
-                  2,
-                  3
-              ]),
-              o($V7, [
-                  2,
-                  4
-              ]),
-              o($V7, [
-                  2,
-                  5
-              ]),
-              o([
-                  14,
-                  18,
-                  21,
-                  22,
-                  24
-              ], [
-                  2,
-                  1
-              ]),
-              o($V7, [
-                  2,
-                  2
-              ]),
-              {
-                  3: 20,
-                  4: $V0,
-                  18: [
-                      1,
-                      17
-                  ],
-                  19: 18,
-                  20: 19
-              },
-              {
-                  3: 5,
-                  4: $V0,
-                  5: 6,
-                  6: $V1,
-                  7: 3,
-                  8: $V2,
-                  9: 4,
-                  10: $V3,
-                  11: $V4,
-                  13: 23,
-                  15: 7,
-                  16: 8,
-                  17: $V5,
-                  23: $V6,
-                  24: [
-                      1,
-                      21
-                  ],
-                  25: 22
-              },
-              {
-                  1: [
-                      2,
-                      6
-                  ]
-              },
-              o($V7, [
-                  2,
-                  13
-              ]),
-              {
-                  18: [
-                      1,
-                      24
-                  ],
-                  22: [
-                      1,
-                      25
-                  ]
-              },
-              o($V8, [
-                  2,
-                  16
-              ]),
-              {
-                  21: [
-                      1,
-                      26
-                  ]
-              },
-              o($V7, [
-                  2,
-                  18
-              ]),
-              {
-                  22: [
-                      1,
-                      28
-                  ],
-                  24: [
-                      1,
-                      27
-                  ]
-              },
-              o($V9, [
-                  2,
-                  20
-              ]),
-              o($V7, [
-                  2,
-                  14
-              ]),
-              {
-                  3: 20,
-                  4: $V0,
-                  20: 29
-              },
-              {
-                  3: 5,
-                  4: $V0,
-                  5: 6,
-                  6: $V1,
-                  7: 3,
-                  8: $V2,
-                  9: 4,
-                  10: $V3,
-                  11: $V4,
-                  13: 30,
-                  15: 7,
-                  16: 8,
-                  17: $V5,
-                  23: $V6
-              },
-              o($V7, [
-                  2,
-                  19
-              ]),
-              {
-                  3: 5,
-                  4: $V0,
-                  5: 6,
-                  6: $V1,
-                  7: 3,
-                  8: $V2,
-                  9: 4,
-                  10: $V3,
-                  11: $V4,
-                  13: 31,
-                  15: 7,
-                  16: 8,
-                  17: $V5,
-                  23: $V6
-              },
-              o($V8, [
-                  2,
-                  17
-              ]),
-              o($V8, [
-                  2,
-                  15
-              ]),
-              o($V9, [
-                  2,
-                  21
-              ])
-          ],
-          defaultActions: {
-              16: [
-                  2,
-                  6
-              ]
-          },
-          parseError: function parseError(str, hash) {
-              if (hash.recoverable) {
-                  this.trace(str);
-              } else {
-                  throw new Error(str);
+              return token;
+          }
+      var symbol, state, action, r, yyval = {}, p, len, newState, expected;
+      while (true) {
+          state = stack[stack.length - 1];
+          if (this.defaultActions[state]) {
+              action = this.defaultActions[state];
+          } else {
+              if (symbol === null || typeof symbol == 'undefined') {
+                  symbol = lex();
               }
-          },
-          parse: function parse(input) {
-              var self = this, stack = [0], vstack = [null], lstack = [], table = this.table, yytext = '', yylineno = 0, yyleng = 0, TERROR = 2, EOF = 1;
-              var args = lstack.slice.call(arguments, 1);
-              var lexer = Object.create(this.lexer);
-              var sharedState = { yy: {} };
-              for (var k in this.yy) {
-                  if (Object.prototype.hasOwnProperty.call(this.yy, k)) {
-                      sharedState.yy[k] = this.yy[k];
+              action = table[state] && table[state][symbol];
+          }
+                      if (typeof action === 'undefined' || !action.length || !action[0]) {
+                  var errStr = '';
+                  expected = [];
+                  for (p in table[state]) {
+                      if (this.terminals_[p] && p > TERROR) {
+                          expected.push('\'' + this.terminals_[p] + '\'');
+                      }
                   }
-              }
-              lexer.setInput(input, sharedState.yy);
-              sharedState.yy.lexer = lexer;
-              sharedState.yy.parser = this;
-              if (typeof lexer.yylloc == 'undefined') {
-                  lexer.yylloc = {};
-              }
-              var yyloc = lexer.yylloc;
-              lstack.push(yyloc);
-              var ranges = lexer.options && lexer.options.ranges;
-              if (typeof sharedState.yy.parseError === 'function') {
-                  this.parseError = sharedState.yy.parseError;
-              } else {
-                  this.parseError = Object.getPrototypeOf(this).parseError;
-              }
-              function lex() {
-                  var token;
-                  token = lexer.lex() || EOF;
-                  if (typeof token !== 'number') {
-                      token = self.symbols_[token] || token;
-                  }
-                  return token;
-              }
-              var symbol, state, action, r, yyval = {}, p, len, newState, expected;
-              while (true) {
-                  state = stack[stack.length - 1];
-                  if (this.defaultActions[state]) {
-                      action = this.defaultActions[state];
+                  if (lexer.showPosition) {
+                      errStr = 'Parse error on line ' + (yylineno + 1) + ':\n' + lexer.showPosition() + '\nExpecting ' + expected.join(', ') + ', got \'' + (this.terminals_[symbol] || symbol) + '\'';
                   } else {
-                      if (symbol === null || typeof symbol == 'undefined') {
-                          symbol = lex();
-                      }
-                      action = table[state] && table[state][symbol];
+                      errStr = 'Parse error on line ' + (yylineno + 1) + ': Unexpected ' + (symbol == EOF ? 'end of input' : '\'' + (this.terminals_[symbol] || symbol) + '\'');
                   }
-                  if (typeof action === 'undefined' || !action.length || !action[0]) {
-                      var errStr = '';
-                      expected = [];
-                      for (p in table[state]) {
-                          if (this.terminals_[p] && p > TERROR) {
-                              expected.push('\'' + this.terminals_[p] + '\'');
-                          }
-                      }
-                      if (lexer.showPosition) {
-                          errStr = 'Parse error on line ' + (yylineno + 1) + ':\n' + lexer.showPosition() + '\nExpecting ' + expected.join(', ') + ', got \'' + (this.terminals_[symbol] || symbol) + '\'';
-                      } else {
-                          errStr = 'Parse error on line ' + (yylineno + 1) + ': Unexpected ' + (symbol == EOF ? 'end of input' : '\'' + (this.terminals_[symbol] || symbol) + '\'');
-                      }
-                      this.parseError(errStr, {
-                          text: lexer.match,
-                          token: this.terminals_[symbol] || symbol,
-                          line: lexer.yylineno,
-                          loc: yyloc,
-                          expected: expected
-                      });
-                  }
-                  if (action[0] instanceof Array && action.length > 1) {
-                      throw new Error('Parse Error: multiple actions possible at state: ' + state + ', token: ' + symbol);
-                  }
-                  switch (action[0]) {
-                  case 1:
-                      stack.push(symbol);
-                      vstack.push(lexer.yytext);
-                      lstack.push(lexer.yylloc);
-                      stack.push(action[1]);
-                      symbol = null;
-                      {
-                          yyleng = lexer.yyleng;
-                          yytext = lexer.yytext;
-                          yylineno = lexer.yylineno;
-                          yyloc = lexer.yylloc;
-                      }
-                      break;
-                  case 2:
-                      len = this.productions_[action[1]][1];
-                      yyval.$ = vstack[vstack.length - len];
-                      yyval._$ = {
-                          first_line: lstack[lstack.length - (len || 1)].first_line,
-                          last_line: lstack[lstack.length - 1].last_line,
-                          first_column: lstack[lstack.length - (len || 1)].first_column,
-                          last_column: lstack[lstack.length - 1].last_column
-                      };
-                      if (ranges) {
-                          yyval._$.range = [
-                              lstack[lstack.length - (len || 1)].range[0],
-                              lstack[lstack.length - 1].range[1]
-                          ];
-                      }
-                      r = this.performAction.apply(yyval, [
-                          yytext,
-                          yyleng,
-                          yylineno,
-                          sharedState.yy,
-                          action[1],
-                          vstack,
-                          lstack
-                      ].concat(args));
-                      if (typeof r !== 'undefined') {
-                          return r;
-                      }
-                      if (len) {
-                          stack = stack.slice(0, -1 * len * 2);
-                          vstack = vstack.slice(0, -1 * len);
-                          lstack = lstack.slice(0, -1 * len);
-                      }
-                      stack.push(this.productions_[action[1]][0]);
-                      vstack.push(yyval.$);
-                      lstack.push(yyval._$);
-                      newState = table[stack[stack.length - 2]][stack[stack.length - 1]];
-                      stack.push(newState);
-                      break;
-                  case 3:
-                      return true;
-                  }
+                  this.parseError(errStr, {
+                      text: lexer.match,
+                      token: this.terminals_[symbol] || symbol,
+                      line: lexer.yylineno,
+                      loc: yyloc,
+                      expected: expected
+                  });
               }
+          if (action[0] instanceof Array && action.length > 1) {
+              throw new Error('Parse Error: multiple actions possible at state: ' + state + ', token: ' + symbol);
+          }
+          switch (action[0]) {
+          case 1:
+              stack.push(symbol);
+              vstack.push(lexer.yytext);
+              lstack.push(lexer.yylloc);
+              stack.push(action[1]);
+              symbol = null;
+              {
+                  yyleng = lexer.yyleng;
+                  yytext = lexer.yytext;
+                  yylineno = lexer.yylineno;
+                  yyloc = lexer.yylloc;
+              }
+              break;
+          case 2:
+              len = this.productions_[action[1]][1];
+              yyval.$ = vstack[vstack.length - len];
+              yyval._$ = {
+                  first_line: lstack[lstack.length - (len || 1)].first_line,
+                  last_line: lstack[lstack.length - 1].last_line,
+                  first_column: lstack[lstack.length - (len || 1)].first_column,
+                  last_column: lstack[lstack.length - 1].last_column
+              };
+              if (ranges) {
+                  yyval._$.range = [
+                      lstack[lstack.length - (len || 1)].range[0],
+                      lstack[lstack.length - 1].range[1]
+                  ];
+              }
+              r = this.performAction.apply(yyval, [
+                  yytext,
+                  yyleng,
+                  yylineno,
+                  sharedState.yy,
+                  action[1],
+                  vstack,
+                  lstack
+              ].concat(args));
+              if (typeof r !== 'undefined') {
+                  return r;
+              }
+              if (len) {
+                  stack = stack.slice(0, -1 * len * 2);
+                  vstack = vstack.slice(0, -1 * len);
+                  lstack = lstack.slice(0, -1 * len);
+              }
+              stack.push(this.productions_[action[1]][0]);
+              vstack.push(yyval.$);
+              lstack.push(yyval._$);
+              newState = table[stack[stack.length - 2]][stack[stack.length - 1]];
+              stack.push(newState);
+              break;
+          case 3:
               return true;
           }
-      };
-      var lexer = function () {
-          var lexer = {
-              EOF: 1,
-              parseError: function parseError(str, hash) {
-                  if (this.yy.parser) {
-                      this.yy.parser.parseError(str, hash);
-                  } else {
-                      throw new Error(str);
-                  }
-              },
-              setInput: function (input, yy) {
-                  this.yy = yy || this.yy || {};
-                  this._input = input;
-                  this._more = this._backtrack = this.done = false;
-                  this.yylineno = this.yyleng = 0;
-                  this.yytext = this.matched = this.match = '';
-                  this.conditionStack = ['INITIAL'];
-                  this.yylloc = {
-                      first_line: 1,
-                      first_column: 0,
-                      last_line: 1,
-                      last_column: 0
-                  };
-                  if (this.options.ranges) {
-                      this.yylloc.range = [
-                          0,
-                          0
-                      ];
-                  }
-                  this.offset = 0;
-                  return this;
-              },
-              input: function () {
-                  var ch = this._input[0];
-                  this.yytext += ch;
-                  this.yyleng++;
-                  this.offset++;
-                  this.match += ch;
-                  this.matched += ch;
-                  var lines = ch.match(/(?:\r\n?|\n).*/g);
-                  if (lines) {
-                      this.yylineno++;
-                      this.yylloc.last_line++;
-                  } else {
-                      this.yylloc.last_column++;
-                  }
-                  if (this.options.ranges) {
-                      this.yylloc.range[1]++;
-                  }
-                  this._input = this._input.slice(1);
-                  return ch;
-              },
-              unput: function (ch) {
-                  var len = ch.length;
-                  var lines = ch.split(/(?:\r\n?|\n)/g);
-                  this._input = ch + this._input;
-                  this.yytext = this.yytext.substr(0, this.yytext.length - len);
-                  this.offset -= len;
-                  var oldLines = this.match.split(/(?:\r\n?|\n)/g);
-                  this.match = this.match.substr(0, this.match.length - 1);
-                  this.matched = this.matched.substr(0, this.matched.length - 1);
-                  if (lines.length - 1) {
-                      this.yylineno -= lines.length - 1;
-                  }
-                  var r = this.yylloc.range;
-                  this.yylloc = {
+      }
+      return true;
+  }};
+  /* generated by jison-lex 0.3.4 */
+  var lexer = (function(){
+  var lexer = ({
+
+  EOF:1,
+
+  parseError:function parseError(str, hash) {
+          if (this.yy.parser) {
+              this.yy.parser.parseError(str, hash);
+          } else {
+              throw new Error(str);
+          }
+      },
+
+  // resets the lexer, sets new input
+  setInput:function (input, yy) {
+          this.yy = yy || this.yy || {};
+          this._input = input;
+          this._more = this._backtrack = this.done = false;
+          this.yylineno = this.yyleng = 0;
+          this.yytext = this.matched = this.match = '';
+          this.conditionStack = ['INITIAL'];
+          this.yylloc = {
+              first_line: 1,
+              first_column: 0,
+              last_line: 1,
+              last_column: 0
+          };
+          if (this.options.ranges) {
+              this.yylloc.range = [0,0];
+          }
+          this.offset = 0;
+          return this;
+      },
+
+  // consumes and returns one char from the input
+  input:function () {
+          var ch = this._input[0];
+          this.yytext += ch;
+          this.yyleng++;
+          this.offset++;
+          this.match += ch;
+          this.matched += ch;
+          var lines = ch.match(/(?:\r\n?|\n).*/g);
+          if (lines) {
+              this.yylineno++;
+              this.yylloc.last_line++;
+          } else {
+              this.yylloc.last_column++;
+          }
+          if (this.options.ranges) {
+              this.yylloc.range[1]++;
+          }
+
+          this._input = this._input.slice(1);
+          return ch;
+      },
+
+  // unshifts one char (or a string) into the input
+  unput:function (ch) {
+          var len = ch.length;
+          var lines = ch.split(/(?:\r\n?|\n)/g);
+
+          this._input = ch + this._input;
+          this.yytext = this.yytext.substr(0, this.yytext.length - len);
+          //this.yyleng -= len;
+          this.offset -= len;
+          var oldLines = this.match.split(/(?:\r\n?|\n)/g);
+          this.match = this.match.substr(0, this.match.length - 1);
+          this.matched = this.matched.substr(0, this.matched.length - 1);
+
+          if (lines.length - 1) {
+              this.yylineno -= lines.length - 1;
+          }
+          var r = this.yylloc.range;
+
+          this.yylloc = {
+              first_line: this.yylloc.first_line,
+              last_line: this.yylineno + 1,
+              first_column: this.yylloc.first_column,
+              last_column: lines ?
+                  (lines.length === oldLines.length ? this.yylloc.first_column : 0)
+                   + oldLines[oldLines.length - lines.length].length - lines[0].length :
+                this.yylloc.first_column - len
+          };
+
+          if (this.options.ranges) {
+              this.yylloc.range = [r[0], r[0] + this.yyleng - len];
+          }
+          this.yyleng = this.yytext.length;
+          return this;
+      },
+
+  // When called from action, caches matched text and appends it on next action
+  more:function () {
+          this._more = true;
+          return this;
+      },
+
+  // When called from action, signals the lexer that this rule fails to match the input, so the next matching rule (regex) should be tested instead.
+  reject:function () {
+          if (this.options.backtrack_lexer) {
+              this._backtrack = true;
+          } else {
+              return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. You can only invoke reject() in the lexer when the lexer is of the backtracking persuasion (options.backtrack_lexer = true).\n' + this.showPosition(), {
+                  text: "",
+                  token: null,
+                  line: this.yylineno
+              });
+
+          }
+          return this;
+      },
+
+  // retain first n characters of the match
+  less:function (n) {
+          this.unput(this.match.slice(n));
+      },
+
+  // displays already matched input, i.e. for error messages
+  pastInput:function () {
+          var past = this.matched.substr(0, this.matched.length - this.match.length);
+          return (past.length > 20 ? '...':'') + past.substr(-20).replace(/\n/g, "");
+      },
+
+  // displays upcoming input, i.e. for error messages
+  upcomingInput:function () {
+          var next = this.match;
+          if (next.length < 20) {
+              next += this._input.substr(0, 20-next.length);
+          }
+          return (next.substr(0,20) + (next.length > 20 ? '...' : '')).replace(/\n/g, "");
+      },
+
+  // displays the character position where the lexing error occurred, i.e. for error messages
+  showPosition:function () {
+          var pre = this.pastInput();
+          var c = new Array(pre.length + 1).join("-");
+          return pre + this.upcomingInput() + "\n" + c + "^";
+      },
+
+  // test the lexed token: return FALSE when not a match, otherwise return token
+  test_match:function (match, indexed_rule) {
+          var token,
+              lines,
+              backup;
+
+          if (this.options.backtrack_lexer) {
+              // save context
+              backup = {
+                  yylineno: this.yylineno,
+                  yylloc: {
                       first_line: this.yylloc.first_line,
-                      last_line: this.yylineno + 1,
+                      last_line: this.last_line,
                       first_column: this.yylloc.first_column,
-                      last_column: lines ? (lines.length === oldLines.length ? this.yylloc.first_column : 0) + oldLines[oldLines.length - lines.length].length - lines[0].length : this.yylloc.first_column - len
-                  };
-                  if (this.options.ranges) {
-                      this.yylloc.range = [
-                          r[0],
-                          r[0] + this.yyleng - len
-                      ];
-                  }
-                  this.yyleng = this.yytext.length;
-                  return this;
-              },
-              more: function () {
-                  this._more = true;
-                  return this;
-              },
-              reject: function () {
+                      last_column: this.yylloc.last_column
+                  },
+                  yytext: this.yytext,
+                  match: this.match,
+                  matches: this.matches,
+                  matched: this.matched,
+                  yyleng: this.yyleng,
+                  offset: this.offset,
+                  _more: this._more,
+                  _input: this._input,
+                  yy: this.yy,
+                  conditionStack: this.conditionStack.slice(0),
+                  done: this.done
+              };
+              if (this.options.ranges) {
+                  backup.yylloc.range = this.yylloc.range.slice(0);
+              }
+          }
+
+          lines = match[0].match(/(?:\r\n?|\n).*/g);
+          if (lines) {
+              this.yylineno += lines.length;
+          }
+          this.yylloc = {
+              first_line: this.yylloc.last_line,
+              last_line: this.yylineno + 1,
+              first_column: this.yylloc.last_column,
+              last_column: lines ?
+                           lines[lines.length - 1].length - lines[lines.length - 1].match(/\r?\n?/)[0].length :
+                           this.yylloc.last_column + match[0].length
+          };
+          this.yytext += match[0];
+          this.match += match[0];
+          this.matches = match;
+          this.yyleng = this.yytext.length;
+          if (this.options.ranges) {
+              this.yylloc.range = [this.offset, this.offset += this.yyleng];
+          }
+          this._more = false;
+          this._backtrack = false;
+          this._input = this._input.slice(match[0].length);
+          this.matched += match[0];
+          token = this.performAction.call(this, this.yy, this, indexed_rule, this.conditionStack[this.conditionStack.length - 1]);
+          if (this.done && this._input) {
+              this.done = false;
+          }
+          if (token) {
+              return token;
+          } else if (this._backtrack) {
+              // recover context
+              for (var k in backup) {
+                  this[k] = backup[k];
+              }
+              return false; // rule action called reject() implying the next rule should be tested instead.
+          }
+          return false;
+      },
+
+  // return next match in input
+  next:function () {
+          if (this.done) {
+              return this.EOF;
+          }
+          if (!this._input) {
+              this.done = true;
+          }
+
+          var token,
+              match,
+              tempMatch,
+              index;
+          if (!this._more) {
+              this.yytext = '';
+              this.match = '';
+          }
+          var rules = this._currentRules();
+          for (var i = 0; i < rules.length; i++) {
+              tempMatch = this._input.match(this.rules[rules[i]]);
+              if (tempMatch && (!match || tempMatch[0].length > match[0].length)) {
+                  match = tempMatch;
+                  index = i;
                   if (this.options.backtrack_lexer) {
-                      this._backtrack = true;
-                  } else {
-                      return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. You can only invoke reject() in the lexer when the lexer is of the backtracking persuasion (options.backtrack_lexer = true).\n' + this.showPosition(), {
-                          text: '',
-                          token: null,
-                          line: this.yylineno
-                      });
-                  }
-                  return this;
-              },
-              less: function (n) {
-                  this.unput(this.match.slice(n));
-              },
-              pastInput: function () {
-                  var past = this.matched.substr(0, this.matched.length - this.match.length);
-                  return (past.length > 20 ? '...' : '') + past.substr(-20).replace(/\n/g, '');
-              },
-              upcomingInput: function () {
-                  var next = this.match;
-                  if (next.length < 20) {
-                      next += this._input.substr(0, 20 - next.length);
-                  }
-                  return (next.substr(0, 20) + (next.length > 20 ? '...' : '')).replace(/\n/g, '');
-              },
-              showPosition: function () {
-                  var pre = this.pastInput();
-                  var c = new Array(pre.length + 1).join('-');
-                  return pre + this.upcomingInput() + '\n' + c + '^';
-              },
-              test_match: function (match, indexed_rule) {
-                  var token, lines, backup;
-                  if (this.options.backtrack_lexer) {
-                      backup = {
-                          yylineno: this.yylineno,
-                          yylloc: {
-                              first_line: this.yylloc.first_line,
-                              last_line: this.last_line,
-                              first_column: this.yylloc.first_column,
-                              last_column: this.yylloc.last_column
-                          },
-                          yytext: this.yytext,
-                          match: this.match,
-                          matches: this.matches,
-                          matched: this.matched,
-                          yyleng: this.yyleng,
-                          offset: this.offset,
-                          _more: this._more,
-                          _input: this._input,
-                          yy: this.yy,
-                          conditionStack: this.conditionStack.slice(0),
-                          done: this.done
-                      };
-                      if (this.options.ranges) {
-                          backup.yylloc.range = this.yylloc.range.slice(0);
-                      }
-                  }
-                  lines = match[0].match(/(?:\r\n?|\n).*/g);
-                  if (lines) {
-                      this.yylineno += lines.length;
-                  }
-                  this.yylloc = {
-                      first_line: this.yylloc.last_line,
-                      last_line: this.yylineno + 1,
-                      first_column: this.yylloc.last_column,
-                      last_column: lines ? lines[lines.length - 1].length - lines[lines.length - 1].match(/\r?\n?/)[0].length : this.yylloc.last_column + match[0].length
-                  };
-                  this.yytext += match[0];
-                  this.match += match[0];
-                  this.matches = match;
-                  this.yyleng = this.yytext.length;
-                  if (this.options.ranges) {
-                      this.yylloc.range = [
-                          this.offset,
-                          this.offset += this.yyleng
-                      ];
-                  }
-                  this._more = false;
-                  this._backtrack = false;
-                  this._input = this._input.slice(match[0].length);
-                  this.matched += match[0];
-                  token = this.performAction.call(this, this.yy, this, indexed_rule, this.conditionStack[this.conditionStack.length - 1]);
-                  if (this.done && this._input) {
-                      this.done = false;
-                  }
-                  if (token) {
-                      return token;
-                  } else if (this._backtrack) {
-                      for (var k in backup) {
-                          this[k] = backup[k];
-                      }
-                      return false;
-                  }
-                  return false;
-              },
-              next: function () {
-                  if (this.done) {
-                      return this.EOF;
-                  }
-                  if (!this._input) {
-                      this.done = true;
-                  }
-                  var token, match, tempMatch, index;
-                  if (!this._more) {
-                      this.yytext = '';
-                      this.match = '';
-                  }
-                  var rules = this._currentRules();
-                  for (var i = 0; i < rules.length; i++) {
-                      tempMatch = this._input.match(this.rules[rules[i]]);
-                      if (tempMatch && (!match || tempMatch[0].length > match[0].length)) {
-                          match = tempMatch;
-                          index = i;
-                          if (this.options.backtrack_lexer) {
-                              token = this.test_match(tempMatch, rules[i]);
-                              if (token !== false) {
-                                  return token;
-                              } else if (this._backtrack) {
-                                  match = false;
-                                  continue;
-                              } else {
-                                  return false;
-                              }
-                          } else if (!this.options.flex) {
-                              break;
-                          }
-                      }
-                  }
-                  if (match) {
-                      token = this.test_match(match, rules[index]);
+                      token = this.test_match(tempMatch, rules[i]);
                       if (token !== false) {
                           return token;
+                      } else if (this._backtrack) {
+                          match = false;
+                          continue; // rule action called reject() implying a rule MISmatch.
+                      } else {
+                          // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
+                          return false;
                       }
-                      return false;
-                  }
-                  if (this._input === '') {
-                      return this.EOF;
-                  } else {
-                      return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. Unrecognized text.\n' + this.showPosition(), {
-                          text: '',
-                          token: null,
-                          line: this.yylineno
-                      });
-                  }
-              },
-              lex: function lex() {
-                  var r = this.next();
-                  if (r) {
-                      return r;
-                  } else {
-                      return this.lex();
-                  }
-              },
-              begin: function begin(condition) {
-                  this.conditionStack.push(condition);
-              },
-              popState: function popState() {
-                  var n = this.conditionStack.length - 1;
-                  if (n > 0) {
-                      return this.conditionStack.pop();
-                  } else {
-                      return this.conditionStack[0];
-                  }
-              },
-              _currentRules: function _currentRules() {
-                  if (this.conditionStack.length && this.conditionStack[this.conditionStack.length - 1]) {
-                      return this.conditions[this.conditionStack[this.conditionStack.length - 1]].rules;
-                  } else {
-                      return this.conditions['INITIAL'].rules;
-                  }
-              },
-              topState: function topState(n) {
-                  n = this.conditionStack.length - 1 - Math.abs(n || 0);
-                  if (n >= 0) {
-                      return this.conditionStack[n];
-                  } else {
-                      return 'INITIAL';
-                  }
-              },
-              pushState: function pushState(condition) {
-                  this.begin(condition);
-              },
-              stateStackSize: function stateStackSize() {
-                  return this.conditionStack.length;
-              },
-              options: {},
-              performAction: function anonymous(yy, yy_, $avoiding_name_collisions, YY_START) {
-                  switch ($avoiding_name_collisions) {
-                  case 0:
+                  } else if (!this.options.flex) {
                       break;
-                  case 1:
-                      return 6;
-                  case 2:
-                      yy_.yytext = yy_.yytext.substr(1, yy_.yyleng - 2);
-                      return 4;
-                  case 3:
-                      return 17;
-                  case 4:
-                      return 18;
-                  case 5:
-                      return 23;
-                  case 6:
-                      return 24;
-                  case 7:
-                      return 22;
-                  case 8:
-                      return 21;
-                  case 9:
-                      return 10;
-                  case 10:
-                      return 11;
-                  case 11:
-                      return 8;
-                  case 12:
-                      return 14;
-                  case 13:
-                      return 'INVALID';
-                  }
-              },
-              rules: [
-                  /^(?:\s+)/,
-                  /^(?:(-?([0-9]|[1-9][0-9]+))(\.[0-9]+)?([eE][-+]?[0-9]+)?\b)/,
-                  /^(?:"(?:\\[\\"bfnrt/]|\\u[a-fA-F0-9]{4}|[^\\\0-\x09\x0a-\x1f"])*")/,
-                  /^(?:\{)/,
-                  /^(?:\})/,
-                  /^(?:\[)/,
-                  /^(?:\])/,
-                  /^(?:,)/,
-                  /^(?::)/,
-                  /^(?:true\b)/,
-                  /^(?:false\b)/,
-                  /^(?:null\b)/,
-                  /^(?:$)/,
-                  /^(?:.)/
-              ],
-              conditions: {
-                  'INITIAL': {
-                      'rules': [
-                          0,
-                          1,
-                          2,
-                          3,
-                          4,
-                          5,
-                          6,
-                          7,
-                          8,
-                          9,
-                          10,
-                          11,
-                          12,
-                          13
-                      ],
-                      'inclusive': true
                   }
               }
-          };
-          return lexer;
-      }();
-      parser.lexer = lexer;
-      function Parser() {
-          this.yy = {};
-      }
-      Parser.prototype = parser;
-      parser.Parser = Parser;
-      return new Parser();
-  }();
+          }
+          if (match) {
+              token = this.test_match(match, rules[index]);
+              if (token !== false) {
+                  return token;
+              }
+              // else: this is a lexer rule which consumes input without producing a token (e.g. whitespace)
+              return false;
+          }
+          if (this._input === "") {
+              return this.EOF;
+          } else {
+              return this.parseError('Lexical error on line ' + (this.yylineno + 1) + '. Unrecognized text.\n' + this.showPosition(), {
+                  text: "",
+                  token: null,
+                  line: this.yylineno
+              });
+          }
+      },
+
+  // return next match that has a token
+  lex:function lex() {
+          var r = this.next();
+          if (r) {
+              return r;
+          } else {
+              return this.lex();
+          }
+      },
+
+  // activates a new lexer condition state (pushes the new lexer condition state onto the condition stack)
+  begin:function begin(condition) {
+          this.conditionStack.push(condition);
+      },
+
+  // pop the previously active lexer condition state off the condition stack
+  popState:function popState() {
+          var n = this.conditionStack.length - 1;
+          if (n > 0) {
+              return this.conditionStack.pop();
+          } else {
+              return this.conditionStack[0];
+          }
+      },
+
+  // produce the lexer rule set which is active for the currently active lexer condition state
+  _currentRules:function _currentRules() {
+          if (this.conditionStack.length && this.conditionStack[this.conditionStack.length - 1]) {
+              return this.conditions[this.conditionStack[this.conditionStack.length - 1]].rules;
+          } else {
+              return this.conditions["INITIAL"].rules;
+          }
+      },
+
+  // return the currently active lexer condition state; when an index argument is provided it produces the N-th previous condition state, if available
+  topState:function topState(n) {
+          n = this.conditionStack.length - 1 - Math.abs(n || 0);
+          if (n >= 0) {
+              return this.conditionStack[n];
+          } else {
+              return "INITIAL";
+          }
+      },
+
+  // alias for begin(condition)
+  pushState:function pushState(condition) {
+          this.begin(condition);
+      },
+
+  // return the number of states currently on the stack
+  stateStackSize:function stateStackSize() {
+          return this.conditionStack.length;
+      },
+  options: {},
+  performAction: function anonymous(yy,yy_,$avoiding_name_collisions,YY_START) {
+  switch($avoiding_name_collisions) {
+  case 0:/* skip whitespace */
+  break;
+  case 1:return 6
+  case 2:yy_.yytext = yy_.yytext.substr(1,yy_.yyleng-2); return 4
+  case 3:return 17
+  case 4:return 18
+  case 5:return 23
+  case 6:return 24
+  case 7:return 22
+  case 8:return 21
+  case 9:return 10
+  case 10:return 11
+  case 11:return 8
+  case 12:return 14
+  case 13:return 'INVALID'
+  }
+  },
+  rules: [/^(?:\s+)/,/^(?:(-?([0-9]|[1-9][0-9]+))(\.[0-9]+)?([eE][-+]?[0-9]+)?\b)/,/^(?:"(?:\\[\\"bfnrt/]|\\u[a-fA-F0-9]{4}|[^\\\0-\x09\x0a-\x1f"])*")/,/^(?:\{)/,/^(?:\})/,/^(?:\[)/,/^(?:\])/,/^(?:,)/,/^(?::)/,/^(?:true\b)/,/^(?:false\b)/,/^(?:null\b)/,/^(?:$)/,/^(?:.)/],
+  conditions: {"INITIAL":{"rules":[0,1,2,3,4,5,6,7,8,9,10,11,12,13],"inclusive":true}}
+  });
+  return lexer;
+  })();
+  parser.lexer = lexer;
+  function Parser () {
+    this.yy = {};
+  }
+  Parser.prototype = parser;parser.Parser = Parser;
+  return new Parser;
+  })();
+
+
   if (typeof commonjsRequire !== 'undefined' && 'object' !== 'undefined') {
-      exports.parser = parser;
-      exports.Parser = parser.Parser;
-      exports.parse = function () {
-          return parser.parse.apply(parser, arguments);
-      };
+  exports.parser = parser;
+  exports.Parser = parser.Parser;
+  exports.parse = function () { return parser.parse.apply(parser, arguments); };
   }
   });
 
