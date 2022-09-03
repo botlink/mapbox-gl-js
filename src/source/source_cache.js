@@ -153,9 +153,9 @@ class SourceCache extends Evented {
 
     // Duplication of _loadTile with minor changes, I did this to add
     // our caching but without impacting mapbox or merging from upstream
-    _loadTileForOffline(flightPlanId: string, tile: Tile, callback: Callback<void>): void {
+    _loadTileForOffline(key: string, tile: Tile, callback: Callback<void>): void {
         tile.isSymbolTile = this._onlySymbols;
-        return this._source.loadTileForOffline(flightPlanId, tile, callback);
+        return this._source.loadTileForOffline(key, tile, callback);
     }
 
     _unloadTile(tile: Tile): void {
@@ -1067,7 +1067,7 @@ class SourceCache extends Evented {
      */
     // Duplication of _preloadTiles with minor changes, I did this to add
     // our caching but without impacting mapbox or merging from upstream
-    preloadTilesForOffline(flightPlanId: string, transform: Transform | Array<Transform>, callback: Callback<any>) {
+    preloadTilesForOffline(key: string, transform: Transform | Array<Transform>, callback: Callback<any>) {
         const coveringTilesIDs: Map<number, OverscaledTileID> = new Map();
         const transforms = Array.isArray(transform) ? transform : [transform];
 
@@ -1097,7 +1097,7 @@ class SourceCache extends Evented {
 
         asyncAll(tileIDs, (tileID, done) => {
             const tile = new Tile(tileID, this._source.tileSize * tileID.overscaleFactor(), this.transform.tileZoom, this.map.painter, this._isRaster);
-            this._loadTileForOffline(flightPlanId, tile, (err) => {
+            this._loadTileForOffline(key, tile, (err) => {
                 if (this._source.type === 'raster-dem' && tile.dem) this._backfillDEM(tile);
                 done(err, tile);
             });

@@ -137,7 +137,7 @@ export function loadVectorTileForOffline(params: RequestedTileParameters, callba
     const key = JSON.stringify(params.request);
 
     const makeRequest = (callback) => {
-        const request = getArrayBufferForOffline(params.flightPlanId, params.request, (err: ?Error, data: ?ArrayBuffer, cacheControl: ?string, expires: ?string) => {
+        const request = getArrayBufferForOffline(params.key, params.request, (err: ?Error, data: ?ArrayBuffer, cacheControl: ?string, expires: ?string) => {
             if (err) {
                 callback(err);
             } else if (data) {

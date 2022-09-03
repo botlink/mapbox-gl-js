@@ -224,7 +224,7 @@ function makeFetchRequest(requestParameters: RequestParameters, callback: Respon
 
 // Duplication of makeFetchRequest with minor changes, I did this to add
 // our caching but without impacting mapbox or merging from upstream
-function makeFetchRequestForOffline(flightPlanId: string, requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {
+function makeFetchRequestForOffline(key: string, requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {
     const controller = new window.AbortController();
     const request = new window.Request(requestParameters.url, {
         method: requestParameters.method || 'GET',
@@ -293,18 +293,18 @@ function makeFetchRequestForOffline(flightPlanId: string, requestParameters: Req
             const url = stripQueryParameters(request.url);
             const cachedTile = await getCachedTile(url);
 
-            let flightPlanIds = cachedTile ? cachedTile.flightPlanIds : [];
+            let keys = cachedTile ? cachedTile.keys : [];
             if (cachedTile) {
                 await db.tiles.where('url').equalsIgnoreCase(url).delete();
             }
 
-            flightPlanIds.push(flightPlanId);
-            flightPlanIds = flightPlanIds.filter(onlyUnique);
+            keys.push(key);
+            keys = keys.filter(onlyUnique);
 
             try {
                 await db.tiles.add({
                     url,
-                    flightPlanIds,
+                    keys,
                     blob: result,
                 });
             } catch (error) {
@@ -385,7 +385,7 @@ function makeXMLHttpRequest(requestParameters: RequestParameters, callback: Resp
 // test on mobile devices to ensure everything is working
 // Duplication of makeXMLHttpRequest with minor changes, I did this to add
 // our caching but without impacting mapbox or merging from upstream
-function makeXMLHttpRequestForOffline(flightPlanId: string, requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {
+function makeXMLHttpRequestForOffline(key: string, requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {
     const xhr: XMLHttpRequest = new window.XMLHttpRequest();
 
     xhr.open(requestParameters.method || 'GET', requestParameters.url, true);
@@ -444,7 +444,7 @@ export const makeRequest = function(requestParameters: RequestParameters, callba
 
 // Duplication of makeRequest with minor changes, I did this to add
 // our caching but without impacting mapbox or merging from upstream
-export const makeRequestForOffline = function(flightPlanId: string, requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {
+export const makeRequestForOffline = function(key: string, requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {
     // We're trying to use the Fetch API if possible. However, in some situations we can't use it:
     // - Safari exposes window.AbortController, but it doesn't work actually abort any requests in
     //   older versions (see https://bugs.webkit.org/show_bug.cgi?id=174980#c2). In this case,
@@ -453,14 +453,14 @@ export const makeRequestForOffline = function(flightPlanId: string, requestParam
     //   this case we unconditionally use XHR on the current thread since referrers don't matter.
     if (!isFileURL(requestParameters.url)) {
         if (window.fetch && window.Request && window.AbortController && window.Request.prototype.hasOwnProperty('signal')) {
-            return makeFetchRequestForOffline(flightPlanId, requestParameters, callback);
+            return makeFetchRequestForOffline(key, requestParameters, callback);
         }
         if (isWorker() && self.worker && self.worker.actor) {
             const queueOnMainThread = true;
             return self.worker.actor.send('getResourceForOffline', requestParameters, callback, undefined, queueOnMainThread);
         }
     }
-    return makeXMLHttpRequestForOffline(flightPlanId, requestParameters, callback);
+    return makeXMLHttpRequestForOffline(key, requestParameters, callback);
 };
 
 export const getJSON = function(requestParameters: RequestParameters, callback: ResponseCallback<Object>): Cancelable {
@@ -473,8 +473,8 @@ export const getArrayBuffer = function(requestParameters: RequestParameters, cal
 
 // Duplication of getArrayBuffer with minor changes, I did this to add
 // our caching but without impacting mapbox or merging from upstream
-export const getArrayBufferForOffline = function(flightPlanId: string, requestParameters: RequestParameters, callback: ResponseCallback<ArrayBuffer>): Cancelable {
-    return makeRequestForOffline(flightPlanId, extend(requestParameters, {type: 'arrayBuffer'}), callback);
+export const getArrayBufferForOffline = function(key: string, requestParameters: RequestParameters, callback: ResponseCallback<ArrayBuffer>): Cancelable {
+    return makeRequestForOffline(key, extend(requestParameters, {type: 'arrayBuffer'}), callback);
 };
 
 export const postData = function(requestParameters: RequestParameters, callback: ResponseCallback<string>): Cancelable {

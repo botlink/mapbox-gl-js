@@ -72,7 +72,7 @@ import type {Source} from '../source/source.js';
 import type {QueryFeature} from '../util/vectortile_to_geojson.js';
 import type {QueryResult} from '../data/feature_index.js';
 
-import {db, getCachedTilesForFlightPlan} from '../data/botlinkCache';
+import {db, getCachedTilesForKey} from '../data/botlinkCache';
 
 export type ControlPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 /* eslint-disable no-use-before-define */
@@ -3509,7 +3509,7 @@ class Map extends Camera {
         return this;
     }
 
-    cacheAreaForOffline(flightPlanId: string, lat: number, lng: number, zoom: number) {
+    cacheAreaForOffline(key: string, lat: number, lng: number, zoom: number) {
         try {
             const sources: Array<SourceCache> = this.style ? (Object.values(this.style._sourceCaches): any) : [];
 
@@ -3520,7 +3520,7 @@ class Map extends Camera {
             newTransform.zoom = zoom;
             transforms.push(newTransform);
 
-            asyncAll(sources, (source, done) => source.preloadTilesForOffline(flightPlanId, newTransform, done), () => {
+            asyncAll(sources, (source, done) => source.preloadTilesForOffline(key, newTransform, done), () => {
                 this.triggerRepaint();
             });
         } catch (e) {
@@ -3528,16 +3528,16 @@ class Map extends Camera {
         }
     }
 
-    async deleteCachedArea (flightPlanId: string) {
-        const cachedTiles = await getCachedTilesForFlightPlan(flightPlanId);
+    async deleteCachedArea (key: string) {
+        const cachedTiles = await getCachedTilesForKey(key);
         for (let i = 0; i < cachedTiles.length; i++) {
             const cachedTile = cachedTiles[i];
-            const flightPlanIds = cachedTile.flightPlanIds.filter(id => id !== flightPlanId);
-            const tileUsedByMoreThanOneFlightPlan = flightPlanIds > 0;
+            const keys = cachedTile.keys.filter(id => id !== key);
+            const tileUsedByMoreThanOneKey = keys > 0;
 
-            if (tileUsedByMoreThanOneFlightPlan) {
+            if (tileUsedByMoreThanOneKey) {
                 await db.tiles.where('url').equalsIgnoreCase(cachedTile.url).modify({
-                    flightPlanIds
+                    keys
                 });
             } else {
                 await db.tiles.where('url').equalsIgnoreCase(cachedTile.url).delete();

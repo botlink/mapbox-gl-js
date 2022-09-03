@@ -3,7 +3,7 @@ import Dexie from 'dexie';
 
 export const db = new Dexie('botlink-tile-cache');
 db.version(1).stores({
-    tiles: 'url, *flightPlanIds, blob', // Primary key and indexed props
+    tiles: 'url, *keys, blob', // Primary key and indexed props
 });
 
 export const getCachedTile = async (url) => {
@@ -11,7 +11,7 @@ export const getCachedTile = async (url) => {
     return cachedTile;
 };
 
-export const getCachedTilesForFlightPlan = async (flightPlanId: string) => {
-    const cachedTiles = await db.tiles.where('flightPlanIds').equals(flightPlanId).toArray();
+export const getCachedTilesForKey = async (key: string) => {
+    const cachedTiles = await db.tiles.where('keys').equals(key).toArray();
     return cachedTiles;
 };
