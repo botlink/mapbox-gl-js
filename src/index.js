@@ -6,6 +6,7 @@ import assert from 'assert';
 import {supported} from '@mapbox/mapbox-gl-supported';
 
 import {version} from '../package.json';
+import {getCachedTilesForKey} from './data/botlinkCache.js';
 import Map from './ui/map.js';
 import NavigationControl from './ui/control/navigation_control.js';
 import GeolocateControl from './ui/control/geolocate_control.js';
@@ -34,6 +35,7 @@ import browser from './util/browser.js';
 const exported = {
     version,
     supported,
+    getCachedTilesForKey,
     setRTLTextPlugin,
     getRTLTextPluginStatus,
     Map,
