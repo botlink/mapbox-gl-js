@@ -1,6 +1,6 @@
 // @flow
 
-import {getImage, ResourceType} from '../util/ajax.js';
+import {getImage, getImageForOffline, ResourceType} from '../util/ajax.js';
 import {extend, prevPowerOfTwo} from '../util/util.js';
 import {Evented} from '../util/evented.js';
 import browser from '../util/browser.js';
@@ -31,6 +31,66 @@ class RasterDEMTileSource extends RasterTileSource implements Source {
     loadTile(tile: Tile, callback: Callback<void>) {
         const url = this.map._requestManager.normalizeTileURL(tile.tileID.canonical.url(this.tiles, this.scheme), false, this.tileSize);
         tile.request = getImage(this.map._requestManager.transformRequest(url, ResourceType.Tile), imageLoaded.bind(this));
+
+        function imageLoaded(err, img, cacheControl, expires) {
+            delete tile.request;
+            if (tile.aborted) {
+                tile.state = 'unloaded';
+                callback(null);
+            } else if (err) {
+                tile.state = 'errored';
+                callback(err);
+            } else if (img) {
+                if (this.map._refreshExpiredTiles) tile.setExpiryData({cacheControl, expires});
+                const transfer = window.ImageBitmap && img instanceof window.ImageBitmap && offscreenCanvasSupported();
+                // DEMData uses 1px padding. Handle cases with image buffer of 1 and 2 pxs, the rest assume default buffer 0
+                // in order to keep the previous implementation working (no validation against tileSize).
+                const buffer = (img.width - prevPowerOfTwo(img.width)) / 2;
+                // padding is used in getImageData. As DEMData has 1px padding, if DEM tile buffer is 2px, discard outermost pixels.
+                const padding = 1 - buffer;
+                const borderReady = padding < 1;
+                if (!borderReady && !tile.neighboringTiles) {
+                    tile.neighboringTiles = this._getNeighboringTiles(tile.tileID);
+                }
+                const rawImageData = transfer ? img : browser.getImageData(img, padding);
+                const params = {
+                    uid: tile.uid,
+                    coord: tile.tileID,
+                    source: this.id,
+                    rawImageData,
+                    encoding: this.encoding,
+                    padding
+                };
+
+                if (!tile.actor || tile.state === 'expired') {
+                    tile.actor = this.dispatcher.getActor();
+                    tile.actor.send('loadDEMTile', params, done.bind(this), undefined, true);
+                }
+            }
+        }
+
+        function done(err, dem) {
+            if (err) {
+                tile.state = 'errored';
+                callback(err);
+            }
+
+            if (dem) {
+                tile.dem = dem;
+                tile.dem.onDeserialize();
+                tile.needsHillshadePrepare = true;
+                tile.needsDEMTextureUpload = true;
+                tile.state = 'loaded';
+                callback(null);
+            }
+        }
+    }
+
+    // Duplication of loadTile with minor changes, I did this to add
+    // our caching but without impacting mapbox or merging from upstream
+    loadTileForOffline(key: string, tile: Tile, callback: Callback<void>) {
+        const url = this.map._requestManager.normalizeTileURL(tile.tileID.canonical.url(this.tiles, this.scheme), false, this.tileSize);
+        tile.request = getImageForOffline(key, this.map._requestManager.transformRequest(url, ResourceType.Tile), imageLoaded.bind(this));
 
         function imageLoaded(err, img, cacheControl, expires) {
             delete tile.request;

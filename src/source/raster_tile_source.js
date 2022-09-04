@@ -2,7 +2,7 @@
 
 import {extend, pick} from '../util/util.js';
 
-import {getImage, ResourceType} from '../util/ajax.js';
+import {getImage, getImageForOffline, ResourceType} from '../util/ajax.js';
 import {Event, ErrorEvent, Evented} from '../util/evented.js';
 import loadTileJSON from './load_tilejson.js';
 import {postTurnstileEvent} from '../util/mapbox.js';
@@ -114,6 +114,35 @@ class RasterTileSource extends Evented implements Source {
         const use2x = browser.devicePixelRatio >= 2;
         const url = this.map._requestManager.normalizeTileURL(tile.tileID.canonical.url(this.tiles, this.scheme), use2x, this.tileSize);
         tile.request = getImage(this.map._requestManager.transformRequest(url, ResourceType.Tile), (error, data, cacheControl, expires) => {
+            delete tile.request;
+
+            if (tile.aborted) {
+                tile.state = 'unloaded';
+                return callback(null);
+            }
+
+            if (error) {
+                tile.state = 'errored';
+                return callback(error);
+            }
+
+            if (!data) return callback(null);
+
+            if (this.map._refreshExpiredTiles) tile.setExpiryData({cacheControl, expires});
+            tile.setTexture(data, this.map.painter);
+            tile.state = 'loaded';
+
+            cacheEntryPossiblyAdded(this.dispatcher);
+            callback(null);
+        });
+    }
+
+    // Duplication of loadTile with minor changes, I did this to add
+    // our caching but without impacting mapbox or merging from upstream
+    loadTileForOffline(key: string, tile: Tile, callback: Callback<void>) {
+        const use2x = browser.devicePixelRatio >= 2;
+        const url = this.map._requestManager.normalizeTileURL(tile.tileID.canonical.url(this.tiles, this.scheme), use2x, this.tileSize);
+        tile.request = getImageForOffline(key, this.map._requestManager.transformRequest(url, ResourceType.Tile), (error, data, cacheControl, expires) => {
             delete tile.request;
 
             if (tile.aborted) {

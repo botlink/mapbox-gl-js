@@ -6837,6 +6837,59 @@ const getImage = function (requestParameters, callback) {
         }
     };
 };
+const getImageForOffline = function (key, requestParameters, callback) {
+    if (exported.supported) {
+        if (!requestParameters.headers) {
+            requestParameters.headers = {};
+        }
+        requestParameters.headers.accept = 'image/webp,*/*';
+    }
+    if (numImageRequests >= config.MAX_PARALLEL_IMAGE_REQUESTS) {
+        const queued = {
+            requestParameters,
+            callback,
+            cancelled: false,
+            cancel() {
+                this.cancelled = true;
+            }
+        };
+        imageQueue.push(queued);
+        return queued;
+    }
+    numImageRequests++;
+    let advanced = false;
+    const advanceImageRequestQueue = () => {
+        if (advanced)
+            return;
+        advanced = true;
+        numImageRequests--;
+        while (imageQueue.length && numImageRequests < config.MAX_PARALLEL_IMAGE_REQUESTS) {
+            const request = imageQueue.shift();
+            const {requestParameters, callback, cancelled} = request;
+            if (!cancelled) {
+                request.cancel = getImage(requestParameters, callback).cancel;
+            }
+        }
+    };
+    const request = getArrayBufferForOffline(key, requestParameters, (err, data, cacheControl, expires) => {
+        advanceImageRequestQueue();
+        if (err) {
+            callback(err);
+        } else if (data) {
+            if (window$1.createImageBitmap) {
+                arrayBufferToImageBitmap(data, (err, imgBitmap) => callback(err, imgBitmap, cacheControl, expires));
+            } else {
+                arrayBufferToImage(data, (err, img) => callback(err, img, cacheControl, expires));
+            }
+        }
+    });
+    return {
+        cancel: () => {
+            request.cancel();
+            advanceImageRequestQueue();
+        }
+    };
+};
 const getVideo = function (urls, callback) {
     const video = window$1.document.createElement('video');
     video.muted = true;
@@ -31442,6 +31495,7 @@ exports.getCachedTilesForKey = getCachedTilesForKey;
 exports.getColumn = getColumn;
 exports.getGridMatrix = getGridMatrix;
 exports.getImage = getImage;
+exports.getImageForOffline = getImageForOffline;
 exports.getJSON = getJSON;
 exports.getLatitudinalLod = getLatitudinalLod;
 exports.getMapSessionAPI = getMapSessionAPI;
@@ -36069,6 +36123,32 @@ class RasterTileSource extends ref_properties.Evented {
             callback(null);
         });
     }
+    loadTileForOffline(key, tile, callback) {
+        const use2x = ref_properties.exported.devicePixelRatio >= 2;
+        const url = this.map._requestManager.normalizeTileURL(tile.tileID.canonical.url(this.tiles, this.scheme), use2x, this.tileSize);
+        tile.request = ref_properties.getImageForOffline(key, this.map._requestManager.transformRequest(url, ref_properties.ResourceType.Tile), (error, data, cacheControl, expires) => {
+            delete tile.request;
+            if (tile.aborted) {
+                tile.state = 'unloaded';
+                return callback(null);
+            }
+            if (error) {
+                tile.state = 'errored';
+                return callback(error);
+            }
+            if (!data)
+                return callback(null);
+            if (this.map._refreshExpiredTiles)
+                tile.setExpiryData({
+                    cacheControl,
+                    expires
+                });
+            tile.setTexture(data, this.map.painter);
+            tile.state = 'loaded';
+            ref_properties.cacheEntryPossiblyAdded(this.dispatcher);
+            callback(null);
+        });
+    }
     static loadTileData(tile, data, painter) {
         tile.setTexture(data, painter);
     }
@@ -36113,6 +36193,60 @@ class RasterDEMTileSource extends RasterTileSource {
     loadTile(tile, callback) {
         const url = this.map._requestManager.normalizeTileURL(tile.tileID.canonical.url(this.tiles, this.scheme), false, this.tileSize);
         tile.request = ref_properties.getImage(this.map._requestManager.transformRequest(url, ref_properties.ResourceType.Tile), imageLoaded.bind(this));
+        function imageLoaded(err, img, cacheControl, expires) {
+            delete tile.request;
+            if (tile.aborted) {
+                tile.state = 'unloaded';
+                callback(null);
+            } else if (err) {
+                tile.state = 'errored';
+                callback(err);
+            } else if (img) {
+                if (this.map._refreshExpiredTiles)
+                    tile.setExpiryData({
+                        cacheControl,
+                        expires
+                    });
+                const transfer = ref_properties.window.ImageBitmap && img instanceof ref_properties.window.ImageBitmap && offscreenCanvasSupported();
+                const buffer = (img.width - ref_properties.prevPowerOfTwo(img.width)) / 2;
+                const padding = 1 - buffer;
+                const borderReady = padding < 1;
+                if (!borderReady && !tile.neighboringTiles) {
+                    tile.neighboringTiles = this._getNeighboringTiles(tile.tileID);
+                }
+                const rawImageData = transfer ? img : ref_properties.exported.getImageData(img, padding);
+                const params = {
+                    uid: tile.uid,
+                    coord: tile.tileID,
+                    source: this.id,
+                    rawImageData,
+                    encoding: this.encoding,
+                    padding
+                };
+                if (!tile.actor || tile.state === 'expired') {
+                    tile.actor = this.dispatcher.getActor();
+                    tile.actor.send('loadDEMTile', params, done.bind(this), undefined, true);
+                }
+            }
+        }
+        function done(err, dem) {
+            if (err) {
+                tile.state = 'errored';
+                callback(err);
+            }
+            if (dem) {
+                tile.dem = dem;
+                tile.dem.onDeserialize();
+                tile.needsHillshadePrepare = true;
+                tile.needsDEMTextureUpload = true;
+                tile.state = 'loaded';
+                callback(null);
+            }
+        }
+    }
+    loadTileForOffline(key, tile, callback) {
+        const url = this.map._requestManager.normalizeTileURL(tile.tileID.canonical.url(this.tiles, this.scheme), false, this.tileSize);
+        tile.request = ref_properties.getImageForOffline(key, this.map._requestManager.transformRequest(url, ref_properties.ResourceType.Tile), imageLoaded.bind(this));
         function imageLoaded(err, img, cacheControl, expires) {
             delete tile.request;
             if (tile.aborted) {

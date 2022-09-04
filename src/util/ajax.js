@@ -587,6 +587,69 @@ export const getImage = function(requestParameters: RequestParameters, callback:
     };
 };
 
+// Duplication of getImage with minor changes, I did this to add
+// our caching but without impacting mapbox or merging from upstream
+export const getImageForOffline = function(key: string, requestParameters: RequestParameters, callback: ResponseCallback<HTMLImageElement | ImageBitmap>): Cancelable {
+    if (webpSupported.supported) {
+        if (!requestParameters.headers) {
+            requestParameters.headers = {};
+        }
+        requestParameters.headers.accept = 'image/webp,*/*';
+    }
+
+    // limit concurrent image loads to help with raster sources performance on big screens
+    if (numImageRequests >= config.MAX_PARALLEL_IMAGE_REQUESTS) {
+        const queued = {
+            requestParameters,
+            callback,
+            cancelled: false,
+            cancel() { this.cancelled = true; }
+        };
+        imageQueue.push(queued);
+        return queued;
+    }
+    numImageRequests++;
+
+    let advanced = false;
+    const advanceImageRequestQueue = () => {
+        if (advanced) return;
+        advanced = true;
+        numImageRequests--;
+        assert(numImageRequests >= 0);
+        while (imageQueue.length && numImageRequests < config.MAX_PARALLEL_IMAGE_REQUESTS) { // eslint-disable-line
+            const request = imageQueue.shift();
+            const {requestParameters, callback, cancelled} = request;
+            if (!cancelled) {
+                request.cancel = getImage(requestParameters, callback).cancel;
+            }
+        }
+    };
+
+    // request the image with XHR to work around caching issues
+    // see https://github.com/mapbox/mapbox-gl-js/issues/1470
+    const request = getArrayBufferForOffline(key, requestParameters, (err: ?Error, data: ?ArrayBuffer, cacheControl: ?string, expires: ?string) => {
+
+        advanceImageRequestQueue();
+
+        if (err) {
+            callback(err);
+        } else if (data) {
+            if (window.createImageBitmap) {
+                arrayBufferToImageBitmap(data, (err, imgBitmap) => callback(err, imgBitmap, cacheControl, expires));
+            } else {
+                arrayBufferToImage(data, (err, img) => callback(err, img, cacheControl, expires));
+            }
+        }
+    });
+
+    return {
+        cancel: () => {
+            request.cancel();
+            advanceImageRequestQueue();
+        }
+    };
+};
+
 export const getVideo = function(urls: Array<string>, callback: Callback<HTMLVideoElement>): Cancelable {
     const video: HTMLVideoElement = window.document.createElement('video');
     video.muted = true;
