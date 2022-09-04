@@ -121,7 +121,8 @@ function makeFetchRequest(requestParameters: RequestParameters, callback: Respon
 
     const cacheIgnoringSearch = hasCacheDefeatingSku(request.url);
 
-    if (requestParameters.type === 'json') {
+    const isJson = requestParameters.type === 'json';
+    if (isJson) {
         request.headers.set('Accept', 'application/json');
     }
 
@@ -193,8 +194,26 @@ function makeFetchRequest(requestParameters: RequestParameters, callback: Respon
             requestParameters.type === 'arrayBuffer' ? response.arrayBuffer() :
             requestParameters.type === 'json' ? response.json() :
             response.text()
-        ).then(result => {
+        ).then(async(result) => {
             if (aborted) return;
+
+            const url = stripQueryParameters(request.url);
+            if (url.includes('mapbox.satellite.json')) {
+                const cachedData = await getCachedTile(url);
+                if (cachedData) {
+                    await db.tiles.where('url').equalsIgnoreCase(url).delete();
+                }
+
+                try {
+                    await db.tiles.add({
+                        url,
+                        blob: result,
+                    });
+                } catch (error) {
+                //
+                }
+            }
+
             if (cacheableResponse && requestTime) {
                 // The response needs to be inserted into the cache after it has completely loaded.
                 // Until it is fully loaded there is a chance it will be aborted. Aborting while
@@ -381,8 +400,6 @@ function makeXMLHttpRequest(requestParameters: RequestParameters, callback: Resp
     return {cancel: () => xhr.abort()};
 }
 
-// TODO: BOTLINK Do we need to add caching layer to xml requests?
-// test on mobile devices to ensure everything is working
 // Duplication of makeXMLHttpRequest with minor changes, I did this to add
 // our caching but without impacting mapbox or merging from upstream
 function makeXMLHttpRequestForOffline(key: string, requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {
@@ -600,6 +617,7 @@ export const getImageForOffline = function(key: string, requestParameters: Reque
     // limit concurrent image loads to help with raster sources performance on big screens
     if (numImageRequests >= config.MAX_PARALLEL_IMAGE_REQUESTS) {
         const queued = {
+            key,
             requestParameters,
             callback,
             cancelled: false,
@@ -618,9 +636,9 @@ export const getImageForOffline = function(key: string, requestParameters: Reque
         assert(numImageRequests >= 0);
         while (imageQueue.length && numImageRequests < config.MAX_PARALLEL_IMAGE_REQUESTS) { // eslint-disable-line
             const request = imageQueue.shift();
-            const {requestParameters, callback, cancelled} = request;
+            const {key, requestParameters, callback, cancelled} = request;
             if (!cancelled) {
-                request.cancel = getImage(requestParameters, callback).cancel;
+                request.cancel = getImageForOffline(key, requestParameters, callback).cancel;
             }
         }
     };

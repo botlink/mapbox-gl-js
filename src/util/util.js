@@ -277,7 +277,11 @@ export function asyncAll<Item, Result>(
         fn(item, (err, result) => {
             if (err) error = err;
             results[i] = ((result: any): Result); // https://github.com/facebook/flow/issues/2123
-            if (--remaining === 0) callback(error, results);
+
+            --remaining;
+            if (remaining <= 0) {
+                callback(error, results);
+            }
         });
     });
 }

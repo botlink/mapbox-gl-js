@@ -367,8 +367,10 @@ function asyncAll(array, fn, callback) {
             if (err)
                 error = err;
             results[i] = result;
-            if (--remaining === 0)
+            --remaining;
+            if (remaining <= 0) {
                 callback(error, results);
+            }
         });
     });
 }
@@ -6471,7 +6473,8 @@ function makeFetchRequest(requestParameters, callback) {
     let complete = false;
     let aborted = false;
     const cacheIgnoringSearch = hasCacheDefeatingSku(request.url);
-    if (requestParameters.type === 'json') {
+    const isJson = requestParameters.type === 'json';
+    if (isJson) {
         request.headers.set('Accept', 'application/json');
     }
     const validateOrFetch = async (err, cachedResponse, responseIsFresh) => {
@@ -6524,9 +6527,23 @@ function makeFetchRequest(requestParameters, callback) {
         });
     };
     const finishRequest = (response, cacheableResponse, requestTime) => {
-        (requestParameters.type === 'arrayBuffer' ? response.arrayBuffer() : requestParameters.type === 'json' ? response.json() : response.text()).then(result => {
+        (requestParameters.type === 'arrayBuffer' ? response.arrayBuffer() : requestParameters.type === 'json' ? response.json() : response.text()).then(async result => {
             if (aborted)
                 return;
+            const url = stripQueryParameters(request.url);
+            if (url.includes('mapbox.satellite.json')) {
+                const cachedData = await getCachedTile(url);
+                if (cachedData) {
+                    await db.tiles.where('url').equalsIgnoreCase(url).delete();
+                }
+                try {
+                    await db.tiles.add({
+                        url,
+                        blob: result
+                    });
+                } catch (error) {
+                }
+            }
             if (cacheableResponse && requestTime) {
                 cachePut(request, cacheableResponse, requestTime);
             }
@@ -6846,6 +6863,7 @@ const getImageForOffline = function (key, requestParameters, callback) {
     }
     if (numImageRequests >= config.MAX_PARALLEL_IMAGE_REQUESTS) {
         const queued = {
+            key,
             requestParameters,
             callback,
             cancelled: false,
@@ -6865,9 +6883,9 @@ const getImageForOffline = function (key, requestParameters, callback) {
         numImageRequests--;
         while (imageQueue.length && numImageRequests < config.MAX_PARALLEL_IMAGE_REQUESTS) {
             const request = imageQueue.shift();
-            const {requestParameters, callback, cancelled} = request;
+            const {key, requestParameters, callback, cancelled} = request;
             if (!cancelled) {
-                request.cancel = getImage(requestParameters, callback).cancel;
+                request.cancel = getImageForOffline(key, requestParameters, callback).cancel;
             }
         }
     };
@@ -29770,7 +29788,10 @@ class SourceCache extends Evented {
     }
     _loadTileForOffline(key, tile, callback) {
         tile.isSymbolTile = this._onlySymbols;
-        return this._source.loadTileForOffline(key, tile, callback);
+        if (this._source.loadTileForOffline) {
+            return this._source.loadTileForOffline(key, tile, callback);
+        }
+        return this._source.loadTile(tile, callback);
     }
     _unloadTile(tile) {
         if (this._source.unloadTile)
@@ -30406,35 +30427,43 @@ class SourceCache extends Evented {
         }, callback);
     }
     preloadTilesForOffline(key, transform, callback) {
-        const coveringTilesIDs = new Map();
-        const transforms = Array.isArray(transform) ? transform : [transform];
-        const terrain = this.map.painter.terrain;
-        const tileSize = this.usedForTerrain && terrain ? terrain.getScaledDemTileSize() : this._source.tileSize;
-        for (const tr of transforms) {
-            const tileIDs = tr.coveringTiles({
-                tileSize,
-                minzoom: this._source.minzoom,
-                maxzoom: this._source.maxzoom,
-                roundZoom: this._source.roundZoom && !this.usedForTerrain,
-                reparseOverscaled: this._source.reparseOverscaled,
-                isTerrainDEM: this.usedForTerrain
-            });
-            for (const tileID of tileIDs) {
-                coveringTilesIDs.set(tileID.key, tileID);
+        try {
+            const coveringTilesIDs = new Map();
+            const transforms = Array.isArray(transform) ? transform : [transform];
+            const terrain = this.map.painter.terrain;
+            const tileSize = this.usedForTerrain && terrain ? terrain.getScaledDemTileSize() : this._source.tileSize;
+            for (const tr of transforms) {
+                const tileIDs = tr.coveringTiles({
+                    tileSize,
+                    minzoom: this._source.minzoom,
+                    maxzoom: this._source.maxzoom,
+                    roundZoom: this._source.roundZoom && !this.usedForTerrain,
+                    reparseOverscaled: this._source.reparseOverscaled,
+                    isTerrainDEM: this.usedForTerrain
+                });
+                for (const tileID of tileIDs) {
+                    coveringTilesIDs.set(tileID.key, tileID);
+                }
+                if (this.usedForTerrain) {
+                    tr.updateElevation(false);
+                }
             }
-            if (this.usedForTerrain) {
-                tr.updateElevation(false);
-            }
+            const tileIDs = Array.from(coveringTilesIDs.values());
+            asyncAll(tileIDs, (tileID, done) => {
+                try {
+                    const tile = new Tile(tileID, this._source.tileSize * tileID.overscaleFactor(), this.transform.tileZoom, this.map.painter, this._isRaster);
+                    this._loadTileForOffline(key, tile, err => {
+                        if (this._source.type === 'raster-dem' && tile.dem)
+                            this._backfillDEM(tile);
+                        done(err, tile);
+                    });
+                } catch (e) {
+                    done();
+                }
+            }, callback);
+        } catch (e) {
+            callback();
         }
-        const tileIDs = Array.from(coveringTilesIDs.values());
-        asyncAll(tileIDs, (tileID, done) => {
-            const tile = new Tile(tileID, this._source.tileSize * tileID.overscaleFactor(), this.transform.tileZoom, this.map.painter, this._isRaster);
-            this._loadTileForOffline(key, tile, err => {
-                if (this._source.type === 'raster-dem' && tile.dem)
-                    this._backfillDEM(tile);
-                done(err, tile);
-            });
-        }, callback);
     }
 }
 SourceCache.maxOverzooming = 10;
@@ -53690,18 +53719,21 @@ class Map extends Camera {
         return this;
     }
     cacheAreaForOffline(key, lat, lng, zoom) {
-        try {
-            const sources = this.style ? Object.values(this.style._sourceCaches) : [];
-            const transforms = [];
-            const newTransform = this.transform.clone();
-            newTransform.center = new ref_properties.LngLat(lng, lat);
-            newTransform.zoom = zoom;
-            transforms.push(newTransform);
-            ref_properties.asyncAll(sources, (source, done) => source.preloadTilesForOffline(key, newTransform, done), () => {
-                this.triggerRepaint();
-            });
-        } catch (e) {
-        }
+        return new Promise((resolve, reject) => {
+            try {
+                const sources = this.style ? Object.values(this.style._sourceCaches) : [];
+                const transforms = [];
+                const newTransform = this.transform.clone();
+                newTransform.center = new ref_properties.LngLat(lng, lat);
+                newTransform.zoom = zoom;
+                transforms.push(newTransform);
+                ref_properties.asyncAll(sources, (source, done) => source.preloadTilesForOffline(key, newTransform, done), () => {
+                    this.triggerRepaint();
+                    resolve();
+                });
+            } catch (e) {
+            }
+        });
     }
     async deleteCachedArea(key) {
         const cachedTiles = await ref_properties.getCachedTilesForKey(key);

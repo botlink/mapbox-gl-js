@@ -3510,22 +3510,29 @@ class Map extends Camera {
     }
 
     cacheAreaForOffline(key: string, lat: number, lng: number, zoom: number) {
-        try {
-            const sources: Array<SourceCache> = this.style ? (Object.values(this.style._sourceCaches): any) : [];
+        return new Promise((resolve, reject) => {
+            try {
+                const sources: Array<SourceCache> = this.style ? (Object.values(this.style._sourceCaches): any) : [];
 
-            const transforms = [];
+                const transforms = [];
 
-            const newTransform = this.transform.clone();
-            newTransform.center = new LngLat(lng, lat);
-            newTransform.zoom = zoom;
-            transforms.push(newTransform);
+                const newTransform = this.transform.clone();
+                newTransform.center = new LngLat(lng, lat);
+                newTransform.zoom = zoom;
+                transforms.push(newTransform);
 
-            asyncAll(sources, (source, done) => source.preloadTilesForOffline(key, newTransform, done), () => {
-                this.triggerRepaint();
-            });
-        } catch (e) {
-
-        }
+                asyncAll(
+                    sources,
+                    (source, done) => source.preloadTilesForOffline(key, newTransform, done),
+                    () => {
+                        this.triggerRepaint();
+                        resolve();
+                    }
+                );
+            } catch (e) {
+                //
+            }
+        });
     }
 
     async deleteCachedArea (key: string) {
