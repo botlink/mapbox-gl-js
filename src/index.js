@@ -6,7 +6,7 @@ import assert from 'assert';
 import {supported} from '@mapbox/mapbox-gl-supported';
 
 import {version} from '../package.json';
-import {getCachedTilesForKey} from './data/botlinkCache.js';
+import {getCachedTilesForKey, deleteCachedArea, clearTileCache as clearBotlinkTileCache} from './data/botlinkCache.js';
 import Map from './ui/map.js';
 import NavigationControl from './ui/control/navigation_control.js';
 import GeolocateControl from './ui/control/geolocate_control.js';
@@ -36,6 +36,8 @@ const exported = {
     version,
     supported,
     getCachedTilesForKey,
+    deleteCachedArea,
+    clearBotlinkTileCache,
     setRTLTextPlugin,
     getRTLTextPluginStatus,
     Map,

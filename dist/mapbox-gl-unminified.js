@@ -5676,6 +5676,23 @@ const getCachedTilesForKey = async key => {
     const cachedTiles = await db.tiles.where('keys').equals(key).toArray();
     return cachedTiles;
 };
+const deleteCachedArea = async key => {
+    const cachedTiles = await getCachedTilesForKey(key);
+    for (let i = 0; i < cachedTiles.length; i++) {
+        const cachedTile = cachedTiles[i];
+        const keys = cachedTile.keys.filter(id => id !== key);
+        const tileUsedByMoreThanOneKey = keys > 0;
+        if (tileUsedByMoreThanOneKey) {
+            await db.tiles.where('url').equalsIgnoreCase(cachedTile.url).modify({ keys });
+        } else {
+            await db.tiles.where('url').equalsIgnoreCase(cachedTile.url).delete();
+        }
+    }
+    return cachedTiles;
+};
+const clearTileCache$1 = async url => {
+    return db.tiles.clear();
+};
 
 let linkEl;
 let reducedMotionQuery;
@@ -31476,7 +31493,8 @@ exports.calculateGlobeMatrix = calculateGlobeMatrix;
 exports.calculateGlobeMercatorMatrix = calculateGlobeMercatorMatrix;
 exports.circumferenceAtLatitude = circumferenceAtLatitude;
 exports.clamp = clamp;
-exports.clearTileCache = clearTileCache;
+exports.clearTileCache = clearTileCache$1;
+exports.clearTileCache$1 = clearTileCache;
 exports.clipLine = clipLine;
 exports.clone = clone$1;
 exports.clone$1 = clone$2;
@@ -31489,8 +31507,8 @@ exports.createExpression = createExpression;
 exports.createLayout = createLayout;
 exports.createStyleLayer = createStyleLayer;
 exports.cross = cross;
-exports.db = db;
 exports.degToRad = degToRad;
+exports.deleteCachedArea = deleteCachedArea;
 exports.distance = distance;
 exports.div = div;
 exports.dot = dot$1;
@@ -53736,18 +53754,7 @@ class Map extends Camera {
         });
     }
     async deleteCachedArea(key) {
-        const cachedTiles = await ref_properties.getCachedTilesForKey(key);
-        for (let i = 0; i < cachedTiles.length; i++) {
-            const cachedTile = cachedTiles[i];
-            const keys = cachedTile.keys.filter(id => id !== key);
-            const tileUsedByMoreThanOneKey = keys > 0;
-            if (tileUsedByMoreThanOneKey) {
-                await ref_properties.db.tiles.where('url').equalsIgnoreCase(cachedTile.url).modify({ keys });
-            } else {
-                await ref_properties.db.tiles.where('url').equalsIgnoreCase(cachedTile.url).delete();
-            }
-        }
-        return cachedTiles;
+        return ref_properties.deleteCachedArea(key);
     }
     _onWindowOnline() {
         this._update();
@@ -54976,6 +54983,8 @@ const exported = {
     version: ref_properties.version,
     supported,
     getCachedTilesForKey: ref_properties.getCachedTilesForKey,
+    deleteCachedArea: ref_properties.deleteCachedArea,
+    clearBotlinkTileCache: ref_properties.clearTileCache,
     setRTLTextPlugin: ref_properties.setRTLTextPlugin,
     getRTLTextPluginStatus: ref_properties.getRTLTextPluginStatus,
     Map,
@@ -55021,7 +55030,7 @@ const exported = {
         ref_properties.config.MAX_PARALLEL_IMAGE_REQUESTS = numRequests;
     },
     clearStorage(callback) {
-        ref_properties.clearTileCache(callback);
+        ref_properties.clearTileCache$1(callback);
     },
     workerUrl: '',
     workerClass: null,

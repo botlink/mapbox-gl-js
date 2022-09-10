@@ -72,7 +72,7 @@ import type {Source} from '../source/source.js';
 import type {QueryFeature} from '../util/vectortile_to_geojson.js';
 import type {QueryResult} from '../data/feature_index.js';
 
-import {db, getCachedTilesForKey} from '../data/botlinkCache';
+import {deleteCachedArea} from '../data/botlinkCache';
 
 export type ControlPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 /* eslint-disable no-use-before-define */
@@ -3536,22 +3536,7 @@ class Map extends Camera {
     }
 
     async deleteCachedArea (key: string) {
-        const cachedTiles = await getCachedTilesForKey(key);
-        for (let i = 0; i < cachedTiles.length; i++) {
-            const cachedTile = cachedTiles[i];
-            const keys = cachedTile.keys.filter(id => id !== key);
-            const tileUsedByMoreThanOneKey = keys > 0;
-
-            if (tileUsedByMoreThanOneKey) {
-                await db.tiles.where('url').equalsIgnoreCase(cachedTile.url).modify({
-                    keys
-                });
-            } else {
-                await db.tiles.where('url').equalsIgnoreCase(cachedTile.url).delete();
-            }
-        }
-
-        return cachedTiles;
+        return deleteCachedArea(key);
     }
 
     _onWindowOnline() {
