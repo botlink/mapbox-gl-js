@@ -5690,7 +5690,7 @@ const deleteCachedArea = async key => {
     }
     return cachedTiles;
 };
-const clearTileCache$1 = async url => {
+const clearTileCache$1 = async () => {
     return db.tiles.clear();
 };
 

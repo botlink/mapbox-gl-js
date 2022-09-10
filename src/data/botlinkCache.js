@@ -35,6 +35,6 @@ export const deleteCachedArea = async (key: string) => {
     return cachedTiles;
 };
 
-export const clearTileCache = async (url) => {
+export const clearTileCache = async () => {
     return db.tiles.clear();
 };
