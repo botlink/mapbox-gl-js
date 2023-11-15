@@ -53848,7 +53848,7 @@ class Map extends Camera {
                 transforms.push(newTransform);
                 ref_properties.asyncAll(sources, async (source, done) => {
                     if (source._source && source._source.loadForOffline) {
-                        await source.loadForOffline(key);
+                        await source._source.loadForOffline(key);
                     }
                     source.preloadTilesForOffline(key, newTransform, done);
                 }, () => {
