@@ -31630,6 +31630,7 @@ exports.setRTLTextPlugin = setRTLTextPlugin;
 exports.smoothstep = smoothstep;
 exports.spec = spec;
 exports.storeAuthState = storeAuthState;
+exports.stripQueryParameters = stripQueryParameters;
 exports.sub = sub;
 exports.subtract = subtract;
 exports.symbolSize = symbolSize;
@@ -36092,11 +36093,11 @@ function loadTileJSONForOffline (key, options, requestManager, language, worldvi
             return callback(err);
         } else if (tileJSON) {
             if (options.url) {
-                const jsonUrl = requestManager.normalizeSourceURL(options.url, null, language, worldview);
+                const jsonUrl = ref_properties.stripQueryParameters(requestManager.normalizeSourceURL(options.url, null, language, worldview));
                 const cachedTile = await ref_properties.getCachedTile(jsonUrl);
                 let keys = cachedTile ? cachedTile.keys : [];
                 if (cachedTile) {
-                    await ref_properties.db.tiles.where('url').equalsIgnoreCase(url).delete();
+                    await ref_properties.db.tiles.where('url').equalsIgnoreCase(jsonUrl).delete();
                 }
                 keys.push(key);
                 keys = keys.filter(onlyUnique);

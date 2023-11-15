@@ -10,6 +10,7 @@ import type {Callback} from '../types/callback.js';
 import type {TileJSON} from '../types/tilejson.js';
 import type {Cancelable} from '../types/cancelable.js';
 import {db, getCachedTile} from '../data/botlinkCache';
+import {stripQueryParameters} from '../util/tile_request_cache.js';
 
 export default function (key: string, options: any, requestManager: RequestManager, language: ?string, worldview: ?string, callback: Callback<TileJSON>): Cancelable {
     function onlyUnique(value, index, self) {
@@ -20,12 +21,13 @@ export default function (key: string, options: any, requestManager: RequestManag
             return callback(err);
         } else if (tileJSON) {
             if (options.url) {
-                const jsonUrl = requestManager.normalizeSourceURL(options.url, null, language, worldview);
+                // Strip query param
+                const jsonUrl = stripQueryParameters(requestManager.normalizeSourceURL(options.url, null, language, worldview));
                 const cachedTile = await getCachedTile(jsonUrl);
 
                 let keys = cachedTile ? cachedTile.keys : [];
                 if (cachedTile) {
-                    await db.tiles.where('url').equalsIgnoreCase(url).delete();
+                    await db.tiles.where('url').equalsIgnoreCase(jsonUrl).delete();
                 }
 
                 keys.push(key);
