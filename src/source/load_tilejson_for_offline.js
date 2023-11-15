@@ -1,15 +1,15 @@
 // @flow
 
-import { pick, extend } from '../util/util.js';
+import {pick, extend} from '../util/util.js';
 
-import { getJSON, ResourceType } from '../util/ajax.js';
+import {getJSON, ResourceType} from '../util/ajax.js';
 import browser from '../util/browser.js';
 
-import type { RequestManager } from '../util/mapbox.js';
-import type { Callback } from '../types/callback.js';
-import type { TileJSON } from '../types/tilejson.js';
-import type { Cancelable } from '../types/cancelable.js';
-import { db, getCachedTile } from '../data/botlinkCache';
+import type {RequestManager} from '../util/mapbox.js';
+import type {Callback} from '../types/callback.js';
+import type {TileJSON} from '../types/tilejson.js';
+import type {Cancelable} from '../types/cancelable.js';
+import {db, getCachedTile} from '../data/botlinkCache';
 
 export default function (key: string, options: any, requestManager: RequestManager, language: ?string, worldview: ?string, callback: Callback<TileJSON>): Cancelable {
     function onlyUnique(value, index, self) {
@@ -20,7 +20,7 @@ export default function (key: string, options: any, requestManager: RequestManag
             return callback(err);
         } else if (tileJSON) {
             if (options.url) {
-                const jsonUrl = requestManager.normalizeSourceURL(options.url, null, language, worldview)
+                const jsonUrl = requestManager.normalizeSourceURL(options.url, null, language, worldview);
                 const cachedTile = await getCachedTile(jsonUrl);
 
                 let keys = cachedTile ? cachedTile.keys : [];
@@ -33,7 +33,7 @@ export default function (key: string, options: any, requestManager: RequestManag
 
                 try {
                     await db.tiles.add({
-                        url,
+                        url: jsonUrl,
                         keys,
                         blob: tileJSON,
                     });
@@ -86,7 +86,7 @@ export default function (key: string, options: any, requestManager: RequestManag
     };
 
     if (options.url) {
-        const jsonUrl = requestManager.normalizeSourceURL(options.url, null, language, worldview)
+        const jsonUrl = requestManager.normalizeSourceURL(options.url, null, language, worldview);
         getJSON(requestManager.transformRequest(jsonUrl, ResourceType.Source), loaded);
     } else {
         return browser.frame(() => loaded(null, options));

@@ -36102,7 +36102,7 @@ function loadTileJSONForOffline (key, options, requestManager, language, worldvi
                 keys = keys.filter(onlyUnique);
                 try {
                     await ref_properties.db.tiles.add({
-                        url,
+                        url: jsonUrl,
                         keys,
                         blob: tileJSON
                     });
@@ -53847,7 +53847,7 @@ class Map extends Camera {
                 newTransform.zoom = zoom;
                 transforms.push(newTransform);
                 ref_properties.asyncAll(sources, async (source, done) => {
-                    if (source.loadForOffline) {
+                    if (source._source && source._source.loadForOffline) {
                         await source.loadForOffline(key);
                     }
                     source.preloadTilesForOffline(key, newTransform, done);
