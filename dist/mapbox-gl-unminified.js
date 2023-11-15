@@ -36396,7 +36396,6 @@ class RasterDEMTileSource extends RasterTileSource {
         const url = this.map._requestManager.normalizeTileURL(tile.tileID.canonical.url(this.tiles, this.scheme), false, this.tileSize);
         tile.request = ref_properties.getImageForOffline(key, this.map._requestManager.transformRequest(url, ref_properties.ResourceType.Tile), imageLoaded.bind(this));
         function imageLoaded(err, img, cacheControl, expires) {
-            alert(`imageLoaded${ url }`);
             delete tile.request;
             if (tile.aborted) {
                 tile.state = 'unloaded';

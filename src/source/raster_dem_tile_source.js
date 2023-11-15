@@ -93,7 +93,6 @@ class RasterDEMTileSource extends RasterTileSource implements Source {
         tile.request = getImageForOffline(key, this.map._requestManager.transformRequest(url, ResourceType.Tile), imageLoaded.bind(this));
 
         function imageLoaded(err, img, cacheControl, expires) {
-            alert(`imageLoaded${url}`);
             delete tile.request;
             if (tile.aborted) {
                 tile.state = 'unloaded';
