@@ -5,6 +5,7 @@ import {extend, pick} from '../util/util.js';
 import {getImage, getImageForOffline, ResourceType} from '../util/ajax.js';
 import {Event, ErrorEvent, Evented} from '../util/evented.js';
 import loadTileJSON from './load_tilejson.js';
+import loadTileJSONForOffline from './load_tilejson_for_offline.js';
 import {postTurnstileEvent} from '../util/mapbox.js';
 import TileBounds from './tile_bounds.js';
 import browser from '../util/browser.js';
@@ -89,26 +90,30 @@ class RasterTileSource extends Evented implements Source {
     // Duplication of load with minor changes, I did this to add
     // our caching but without impacting mapbox or merging from upstream
     loadForOffline(key: string) {
-        this._loaded = false;
-        this.fire(new Event('dataloading', { dataType: 'source' }));
-        this._tileJSONRequest = loadTileJSONForOffline(key, this._options, this.map._requestManager, null, null, (err, tileJSON) => {
-            this._tileJSONRequest = null;
-            this._loaded = true;
-            if (err) {
-                this.fire(new ErrorEvent(err));
-            } else if (tileJSON) {
-                extend(this, tileJSON);
-                if (tileJSON.bounds) this.tileBounds = new TileBounds(tileJSON.bounds, this.minzoom, this.maxzoom);
+        return new Promise((resolve, reject) => {
+            this._loaded = false;
+            this.fire(new Event('dataloading', { dataType: 'source' }));
+            this._tileJSONRequest = loadTileJSONForOffline(key, this._options, this.map._requestManager, null, null, (err, tileJSON) => {
+                this._tileJSONRequest = null;
+                this._loaded = true;
+                if (err) {
+                    this.fire(new ErrorEvent(err));
+                    reject(err);
+                } else if (tileJSON) {
+                    extend(this, tileJSON);
+                    if (tileJSON.bounds) this.tileBounds = new TileBounds(tileJSON.bounds, this.minzoom, this.maxzoom);
 
-                postTurnstileEvent(tileJSON.tiles);
+                    postTurnstileEvent(tileJSON.tiles);
 
-                // `content` is included here to prevent a race condition where `Style#_updateSources` is called
-                // before the TileJSON arrives. this makes sure the tiles needed are loaded once TileJSON arrives
-                // ref: https://github.com/mapbox/mapbox-gl-js/pull/4347#discussion_r104418088
-                this.fire(new Event('data', { dataType: 'source', sourceDataType: 'metadata' }));
-                this.fire(new Event('data', { dataType: 'source', sourceDataType: 'content' }));
-            }
-        });
+                    // `content` is included here to prevent a race condition where `Style#_updateSources` is called
+                    // before the TileJSON arrives. this makes sure the tiles needed are loaded once TileJSON arrives
+                    // ref: https://github.com/mapbox/mapbox-gl-js/pull/4347#discussion_r104418088
+                    this.fire(new Event('data', { dataType: 'source', sourceDataType: 'metadata' }));
+                    this.fire(new Event('data', { dataType: 'source', sourceDataType: 'content' }));
+                    resolve();
+                }
+            });
+        })
     }
 
     loaded(): boolean {

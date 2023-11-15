@@ -31507,6 +31507,7 @@ exports.createExpression = createExpression;
 exports.createLayout = createLayout;
 exports.createStyleLayer = createStyleLayer;
 exports.cross = cross;
+exports.db = db;
 exports.degToRad = degToRad;
 exports.deleteCachedArea = deleteCachedArea;
 exports.distance = distance;
@@ -31538,6 +31539,7 @@ exports.getAABBPointSquareDist = getAABBPointSquareDist;
 exports.getAnchorAlignment = getAnchorAlignment;
 exports.getAnchorJustification = getAnchorJustification;
 exports.getBounds = getBounds;
+exports.getCachedTile = getCachedTile;
 exports.getCachedTilesForKey = getCachedTilesForKey;
 exports.getColumn = getColumn;
 exports.getGridMatrix = getGridMatrix;
@@ -36081,6 +36083,77 @@ class VectorTileSource extends ref_properties.Evented {
     }
 }
 
+function loadTileJSONForOffline (key, options, requestManager, language, worldview, callback) {
+    function onlyUnique(value, index, self) {
+        return self.indexOf(value) === index;
+    }
+    const loaded = async function (err, tileJSON) {
+        if (err) {
+            return callback(err);
+        } else if (tileJSON) {
+            if (options.url) {
+                const jsonUrl = requestManager.normalizeSourceURL(options.url, null, language, worldview);
+                const cachedTile = await ref_properties.getCachedTile(jsonUrl);
+                let keys = cachedTile ? cachedTile.keys : [];
+                if (cachedTile) {
+                    await ref_properties.db.tiles.where('url').equalsIgnoreCase(url).delete();
+                }
+                keys.push(key);
+                keys = keys.filter(onlyUnique);
+                try {
+                    await ref_properties.db.tiles.add({
+                        url,
+                        keys,
+                        blob: tileJSON
+                    });
+                } catch (error) {
+                    console.log('botlink cache failed to cache tile');
+                    console.error(error.message);
+                }
+            }
+            const result = ref_properties.pick(ref_properties.extend(tileJSON, options), [
+                'tiles',
+                'minzoom',
+                'maxzoom',
+                'attribution',
+                'mapbox_logo',
+                'bounds',
+                'scheme',
+                'tileSize',
+                'encoding'
+            ]);
+            if (tileJSON.vector_layers) {
+                result.vectorLayers = tileJSON.vector_layers;
+                result.vectorLayerIds = result.vectorLayers.map(layer => {
+                    return layer.id;
+                });
+            }
+            if (tileJSON.language_options) {
+                result.languageOptions = tileJSON.language_options;
+            }
+            if (tileJSON.language && tileJSON.language[tileJSON.id]) {
+                result.language = tileJSON.language[tileJSON.id];
+            }
+            if (tileJSON.worldview_options) {
+                result.worldviewOptions = tileJSON.worldview_options;
+            }
+            if (tileJSON.worldview) {
+                result.worldview = tileJSON.worldview[tileJSON.id];
+            } else if (tileJSON.worldview_default) {
+                result.worldview = tileJSON.worldview_default;
+            }
+            result.tiles = requestManager.canonicalizeTileset(result, options.url);
+            callback(null, result);
+        }
+    };
+    if (options.url) {
+        const jsonUrl = requestManager.normalizeSourceURL(options.url, null, language, worldview);
+        ref_properties.getJSON(requestManager.transformRequest(jsonUrl, ref_properties.ResourceType.Source), loaded);
+    } else {
+        return ref_properties.exported.frame(() => loaded(null, options));
+    }
+}
+
 class RasterTileSource extends ref_properties.Evented {
     constructor(id, options, dispatcher, eventedParent) {
         super();
@@ -36126,27 +36199,31 @@ class RasterTileSource extends ref_properties.Evented {
         });
     }
     loadForOffline(key) {
-        this._loaded = false;
-        this.fire(new ref_properties.Event('dataloading', { dataType: 'source' }));
-        this._tileJSONRequest = loadTileJSONForOffline(key, this._options, this.map._requestManager, null, null, (err, tileJSON) => {
-            this._tileJSONRequest = null;
-            this._loaded = true;
-            if (err) {
-                this.fire(new ref_properties.ErrorEvent(err));
-            } else if (tileJSON) {
-                ref_properties.extend(this, tileJSON);
-                if (tileJSON.bounds)
-                    this.tileBounds = new TileBounds(tileJSON.bounds, this.minzoom, this.maxzoom);
-                ref_properties.postTurnstileEvent(tileJSON.tiles);
-                this.fire(new ref_properties.Event('data', {
-                    dataType: 'source',
-                    sourceDataType: 'metadata'
-                }));
-                this.fire(new ref_properties.Event('data', {
-                    dataType: 'source',
-                    sourceDataType: 'content'
-                }));
-            }
+        return new Promise((resolve, reject) => {
+            this._loaded = false;
+            this.fire(new ref_properties.Event('dataloading', { dataType: 'source' }));
+            this._tileJSONRequest = loadTileJSONForOffline(key, this._options, this.map._requestManager, null, null, (err, tileJSON) => {
+                this._tileJSONRequest = null;
+                this._loaded = true;
+                if (err) {
+                    this.fire(new ref_properties.ErrorEvent(err));
+                    reject(err);
+                } else if (tileJSON) {
+                    ref_properties.extend(this, tileJSON);
+                    if (tileJSON.bounds)
+                        this.tileBounds = new TileBounds(tileJSON.bounds, this.minzoom, this.maxzoom);
+                    ref_properties.postTurnstileEvent(tileJSON.tiles);
+                    this.fire(new ref_properties.Event('data', {
+                        dataType: 'source',
+                        sourceDataType: 'metadata'
+                    }));
+                    this.fire(new ref_properties.Event('data', {
+                        dataType: 'source',
+                        sourceDataType: 'content'
+                    }));
+                    resolve();
+                }
+            });
         });
     }
     loaded() {
@@ -53770,7 +53847,12 @@ class Map extends Camera {
                 newTransform.center = new ref_properties.LngLat(lng, lat);
                 newTransform.zoom = zoom;
                 transforms.push(newTransform);
-                ref_properties.asyncAll(sources, (source, done) => source.preloadTilesForOffline(key, newTransform, done), () => {
+                ref_properties.asyncAll(sources, async (source, done) => {
+                    if (source.loadForOffline) {
+                        await source.loadForOffline(key);
+                    }
+                    source.preloadTilesForOffline(key, newTransform, done);
+                }, () => {
                     this.triggerRepaint();
                     resolve();
                 });
