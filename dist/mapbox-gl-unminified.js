@@ -36125,6 +36125,30 @@ class RasterTileSource extends ref_properties.Evented {
             }
         });
     }
+    loadForOffline(key) {
+        this._loaded = false;
+        this.fire(new ref_properties.Event('dataloading', { dataType: 'source' }));
+        this._tileJSONRequest = loadTileJSONForOffline(key, this._options, this.map._requestManager, null, null, (err, tileJSON) => {
+            this._tileJSONRequest = null;
+            this._loaded = true;
+            if (err) {
+                this.fire(new ref_properties.ErrorEvent(err));
+            } else if (tileJSON) {
+                ref_properties.extend(this, tileJSON);
+                if (tileJSON.bounds)
+                    this.tileBounds = new TileBounds(tileJSON.bounds, this.minzoom, this.maxzoom);
+                ref_properties.postTurnstileEvent(tileJSON.tiles);
+                this.fire(new ref_properties.Event('data', {
+                    dataType: 'source',
+                    sourceDataType: 'metadata'
+                }));
+                this.fire(new ref_properties.Event('data', {
+                    dataType: 'source',
+                    sourceDataType: 'content'
+                }));
+            }
+        });
+    }
     loaded() {
         return this._loaded;
     }
@@ -36293,21 +36317,17 @@ class RasterDEMTileSource extends RasterTileSource {
     }
     loadTileForOffline(key, tile, callback) {
         const url = this.map._requestManager.normalizeTileURL(tile.tileID.canonical.url(this.tiles, this.scheme), false, this.tileSize);
-        alert(`loadTimeForOffline${ url }`);
         tile.request = ref_properties.getImageForOffline(key, this.map._requestManager.transformRequest(url, ref_properties.ResourceType.Tile), imageLoaded.bind(this));
         function imageLoaded(err, img, cacheControl, expires) {
             alert(`imageLoaded${ url }`);
             delete tile.request;
             if (tile.aborted) {
-                alert('aborted');
                 tile.state = 'unloaded';
                 callback(null);
             } else if (err) {
-                alert('errored');
                 tile.state = 'errored';
                 callback(err);
             } else if (img) {
-                alert('success');
                 if (this.map._refreshExpiredTiles)
                     tile.setExpiryData({
                         cacheControl,

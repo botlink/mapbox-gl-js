@@ -90,22 +90,18 @@ class RasterDEMTileSource extends RasterTileSource implements Source {
     // our caching but without impacting mapbox or merging from upstream
     loadTileForOffline(key: string, tile: Tile, callback: Callback<void>) {
         const url = this.map._requestManager.normalizeTileURL(tile.tileID.canonical.url(this.tiles, this.scheme), false, this.tileSize);
-        alert(`loadTimeForOffline${url}`);
         tile.request = getImageForOffline(key, this.map._requestManager.transformRequest(url, ResourceType.Tile), imageLoaded.bind(this));
 
         function imageLoaded(err, img, cacheControl, expires) {
             alert(`imageLoaded${url}`);
             delete tile.request;
             if (tile.aborted) {
-                alert('aborted');
                 tile.state = 'unloaded';
                 callback(null);
             } else if (err) {
-                alert('errored');
                 tile.state = 'errored';
                 callback(err);
             } else if (img) {
-                alert('success');
                 if (this.map._refreshExpiredTiles) tile.setExpiryData({cacheControl, expires});
                 const transfer = window.ImageBitmap && img instanceof window.ImageBitmap && offscreenCanvasSupported();
                 // DEMData uses 1px padding. Handle cases with image buffer of 1 and 2 pxs, the rest assume default buffer 0
