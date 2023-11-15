@@ -53847,12 +53847,7 @@ class Map extends Camera {
                 newTransform.center = new ref_properties.LngLat(lng, lat);
                 newTransform.zoom = zoom;
                 transforms.push(newTransform);
-                ref_properties.asyncAll(sources, async (source, done) => {
-                    if (source._source && source._source.loadForOffline) {
-                        await source._source.loadForOffline(key);
-                    }
-                    source.preloadTilesForOffline(key, newTransform, done);
-                }, () => {
+                ref_properties.asyncAll(sources, async (source, done) => source.preloadTilesForOffline(key, newTransform, done), () => {
                     this.triggerRepaint();
                     resolve();
                 });

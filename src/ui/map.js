@@ -3523,12 +3523,7 @@ class Map extends Camera {
 
                 asyncAll(
                     sources,
-                    async (source, done) => {
-                        if (source._source && source._source.loadForOffline) {
-                            await source._source.loadForOffline(key);
-                        }
-                        source.preloadTilesForOffline(key, newTransform, done);
-                    },
+                    async (source, done) => source.preloadTilesForOffline(key, newTransform, done),
                     () => {
                         this.triggerRepaint();
                         resolve();
