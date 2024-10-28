@@ -1,9 +1,9 @@
 /rollup/build/
-/dist/mapbox-gl*
+# /dist/mapbox-gl*
 /dist/versions*
 /dist/style-spec
 *.es.js
-*.js.map
+# *.js.map
 *.cjs.map
 node_modules
 yarn.lock

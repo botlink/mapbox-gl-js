@@ -27,6 +27,7 @@ import {WorkerPerformanceUtils} from './util/worker_performance_utils';
 import {FreeCameraOptions} from './ui/free_camera';
 import {getDracoUrl, setDracoUrl, setMeshoptUrl, getMeshoptUrl} from '../3d-style/util/loaders';
 import browser from './util/browser';
+import { getCachedTilesForKey, deleteCachedArea, clearTileCache as clearBotlinkTileCache } from './data/botlink_cache';
 
 import type {Class} from './types/class';
 
@@ -81,6 +82,9 @@ const exported = {
     supported,
     setRTLTextPlugin,
     getRTLTextPluginStatus,
+    getCachedTilesForKey,
+    deleteCachedArea,
+    clearBotlinkTileCache,
     Map,
     NavigationControl,
     GeolocateControl,
