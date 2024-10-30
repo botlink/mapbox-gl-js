@@ -4289,6 +4289,7 @@ export declare class VectorTileSource extends Evented<SourceEvents> implements I
 	onRemove(_: Map$1): void;
 	serialize(): VectorSourceSpecification;
 	loadTile(tile: Tile, callback: Callback<undefined>): void;
+	loadTileForOffline(key: string, tile: Tile, callback: Callback<undefined>): void;
 	abortTile(tile: Tile): void;
 	unloadTile(tile: Tile, _?: Callback<undefined> | null): void;
 	hasTransition(): boolean;
@@ -4349,6 +4350,7 @@ export declare class RasterTileSource<T extends "raster" | "raster-dem" | "raste
 	_clear: undefined;
 	constructor(id: string, options: RasterSourceSpecification | RasterDEMSourceSpecification | RasterArraySourceSpecification, dispatcher: Dispatcher, eventedParent: Evented);
 	load(callback?: Callback<undefined>): void;
+	loadForOffline(key: string, callback?: Callback<undefined>): void;
 	loaded(): boolean;
 	onAdd(map: Map$1): void;
 	/**
@@ -4393,6 +4395,7 @@ export declare class RasterTileSource<T extends "raster" | "raster-dem" | "raste
 	serialize(): RasterSourceSpecification | RasterDEMSourceSpecification;
 	hasTile(tileID: OverscaledTileID): boolean;
 	loadTile(tile: Tile, callback: Callback<undefined>): void;
+	loadTileForOffline(key: string, tile: Tile, callback: Callback<undefined>): void;
 	abortTile(tile: Tile, callback?: Callback<undefined>): void;
 	unloadTile(tile: Tile, callback?: Callback<undefined>): void;
 	hasTransition(): boolean;
@@ -4403,6 +4406,7 @@ declare class RasterDEMTileSource extends RasterTileSource<"raster-dem"> impleme
 	encoding: "mapbox" | "terrarium";
 	constructor(id: string, options: RasterDEMSourceSpecification, dispatcher: Dispatcher, eventedParent: Evented);
 	loadTile(tile: Tile, callback: Callback<undefined>): void;
+	loadTileForOffline(key: string, tile: Tile, callback: Callback<undefined>): void;
 	_getNeighboringTiles(tileID: OverscaledTileID): {
 		[key: number]: {
 			backfilled: boolean;
@@ -8452,6 +8456,7 @@ interface ISource extends Evented<SourceEvents> {
 	loadTile: (tile: Tile, callback: Callback<undefined>, tileWorkers?: {
 		[key: string]: Actor$1;
 	}) => void;
+	loadTileForOffline?: (key: string, tile: Tile, callback: Callback<undefined>) => void;
 	readonly hasTile?: (tileID: OverscaledTileID) => boolean;
 	readonly abortTile?: (tile: Tile, callback?: Callback<undefined>) => void;
 	readonly unloadTile?: (tile: Tile, callback?: Callback<undefined>) => void;
@@ -8521,6 +8526,7 @@ declare class SourceCache extends Evented {
 	pause(): void;
 	resume(): void;
 	_loadTile(tile: Tile, callback: Callback<undefined>): void;
+	_loadTileForOffline(key: string, tile: Tile, callback: Callback<undefined>): void;
 	_unloadTile(tile: Tile): void;
 	_abortTile(tile: Tile): void;
 	serialize(): SourceSpecification | {
@@ -8654,6 +8660,14 @@ declare class SourceCache extends Evented {
 	 * @returns {Object} Returns `this` | Promise.
 	 */
 	_preloadTiles(transform: Transform | Array<Transform>, callback: Callback<any>): void;
+	/**
+	 * Preloads all tiles that will be requested for one or a series of transformations
+	 * This data is stored in a botlink implemented cache in addition to the mapbox cache
+	 *
+	 * @private
+	 * @returns {Object} Returns `this` | Promise.
+	 */
+	_preloadTilesForOffline(key: string, transform: Transform | Array<Transform>, callback: Callback<any>): void;
 }
 type ElevationQueryOptions = {
 	exaggerated: boolean;
@@ -11924,6 +11938,9 @@ declare class Style$1 extends Evented<MapEvents> {
 		};
 	}>): void;
 	getResource(mapId: string, params: RequestParameters, callback: ResponseCallback<any>): Cancelable;
+	getResourceForOffline(mapId: string, params: RequestParameters & {
+		key: string;
+	}, callback: ResponseCallback<any>): Cancelable;
 	getOwnSourceCache(source: string): SourceCache | void;
 	getOwnLayerSourceCache(layer: StyleLayer): SourceCache | void;
 	getOwnSourceCaches(source: string): Array<SourceCache>;
@@ -16637,6 +16654,8 @@ declare class Map$1 extends Camera {
 	 * @returns {Object} Returns `this` | Promise.
 	 */
 	_preloadTiles(transform: Transform | Array<Transform>): this;
+	cacheAreaForOffline(key: string, lat: number, lng: number, zoom: number): Promise<void>;
+	deleteCachedArea(key: string): Promise<void>;
 	_onWindowOnline(): void;
 	_onWindowResize(event: UIEvent): void;
 	_onVisibilityChange(): void;
@@ -17207,7 +17226,7 @@ export type VectorSourceImpl = VectorTileSource;
  * @deprecated Use `RasterTileSource` instead.
 */
 export type RasterSourceImpl = RasterTileSource;
-interface Tile$1 {
+interface BotlinkTile {
 	url: string;
 	keys: string[];
 	blob: any;
@@ -17219,7 +17238,7 @@ declare const exported: {
 		err: Error | null | undefined;
 	}> | null, deferred?: boolean) => void;
 	getRTLTextPluginStatus: () => PluginStatus;
-	getCachedTilesForKey: (key: string) => Promise<Tile$1[]>;
+	getCachedTilesForKey: (key: string) => Promise<BotlinkTile[]>;
 	deleteCachedArea: (key: string) => Promise<void>;
 	clearBotlinkTileCache: () => Promise<void>;
 	Map: typeof Map$1;
