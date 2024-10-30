@@ -54507,7 +54507,7 @@ class VectorTileSource extends index.E {
             index.ax(this.dispatcher);
             callback(null);
             if (tile.reloadCallback) {
-                this.loadTileForOffline(tile, tile.reloadCallback);
+                this.loadTileForOffline(key, tile, tile.reloadCallback);
                 tile.reloadCallback = null;
             }
         }

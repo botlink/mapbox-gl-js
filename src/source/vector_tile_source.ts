@@ -397,7 +397,7 @@ class VectorTileSource extends Evented<SourceEvents> implements ISource {
             callback(null);
 
             if (tile.reloadCallback) {
-                this.loadTileForOffline(tile, tile.reloadCallback);
+                this.loadTileForOffline(key, tile, tile.reloadCallback);
                 tile.reloadCallback = null;
             }
         }
