@@ -10,7 +10,7 @@ import Light from './light';
 import Terrain, {DrapeRenderMode} from './terrain';
 import Fog from './fog';
 import {pick, clone, extend, deepEqual, filterObject, cartesianPositionToSpherical, warnOnce} from '../util/util';
-import {getJSON, getReferrer, makeRequest, ResourceType} from '../util/ajax';
+import {getJSON, getReferrer, makeRequest, makeRequestForOffline, ResourceType} from '../util/ajax';
 import {isMapboxURL} from '../util/mapbox_url';
 import {stripQueryParameters} from '../util/url';
 import browser from '../util/browser';
@@ -3636,6 +3636,10 @@ class Style extends Evented<MapEvents> {
 
     getResource(mapId: string, params: RequestParameters, callback: ResponseCallback<any>): Cancelable {
         return makeRequest(params, callback);
+    }
+
+    getResourceForOffline(mapId: string, params: RequestParameters & { key: string }, callback: ResponseCallback<any>): Cancelable {
+        return makeRequestForOffline(params.key, params, callback);
     }
 
     getOwnSourceCache(source: string): SourceCache | void {

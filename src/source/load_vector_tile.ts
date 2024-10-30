@@ -1,6 +1,6 @@
 import {VectorTile} from '@mapbox/vector-tile';
 import Protobuf from 'pbf';
-import {getArrayBuffer} from '../util/ajax';
+import {getArrayBuffer, getArrayBufferForOffline} from '../util/ajax';
 
 import type {Callback} from '../types/callback';
 import type {RequestedTileParameters} from './worker_source';
@@ -91,6 +91,41 @@ export function loadVectorTile(
 
     const makeRequest = (callback: LoadVectorDataCallback) => {
         const request = getArrayBuffer(params.request, (err?: Error | null, data?: ArrayBuffer | null, cacheControl?: string | null, expires?: string | null) => {
+            if (err) {
+                callback(err);
+            } else if (data) {
+                callback(null, {
+                    vectorTile: skipParse ? undefined : new VectorTile(new Protobuf(data)),
+                    rawData: data,
+                    cacheControl,
+                    expires
+                });
+            }
+        });
+        return () => {
+            request.cancel();
+            callback();
+        };
+    };
+
+    if (params.data) {
+        // if we already got the result earlier (on the main thread), return it directly
+        (this.deduped as DedupedRequest).entries[key] = {result: [null, params.data]};
+    }
+
+    const callbackMetadata = {type: 'parseTile', isSymbolTile: params.isSymbolTile, zoom: params.tileZoom};
+    return (this.deduped as DedupedRequest).request(key, callbackMetadata, makeRequest, callback);
+}
+
+export function loadVectorTileForOffline(
+    params: RequestedTileParameters,
+    callback: LoadVectorDataCallback,
+    skipParse?: boolean,
+): () => void {
+    const key = JSON.stringify(params.request);
+
+    const makeRequest = (callback: LoadVectorDataCallback) => {
+        const request = getArrayBufferForOffline(params.key, params.request, (err?: Error | null, data?: ArrayBuffer | null, cacheControl?: string | null, expires?: string | null) => {
             if (err) {
                 callback(err);
             } else if (data) {

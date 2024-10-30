@@ -5,7 +5,7 @@ import {extend} from '../util/util';
 import {getPerformanceMeasurement} from '../util/performance';
 import {Evented} from '../util/evented';
 import tileTransform from '../geo/projection/tile_transform';
-import {loadVectorTile, DedupedRequest} from './load_vector_tile';
+import {loadVectorTile, loadVectorTileForOffline, DedupedRequest} from './load_vector_tile';
 
 import type {
     WorkerSource,
@@ -33,6 +33,7 @@ class VectorTileWorkerSource extends Evented implements WorkerSource {
     layerIndex: StyleLayerIndex;
     availableImages: Array<string>;
     loadVectorData: LoadVectorData;
+    loadVectorDataForOffline: LoadVectorData;
     loading: {
         [_: number]: WorkerTile;
     };
@@ -57,6 +58,7 @@ class VectorTileWorkerSource extends Evented implements WorkerSource {
         this.layerIndex = layerIndex;
         this.availableImages = availableImages;
         this.loadVectorData = loadVectorData || loadVectorTile;
+        this.loadVectorDataForOffline = loadVectorData || loadVectorTileForOffline;
         this.loading = {};
         this.loaded = {};
         this.deduped = new DedupedRequest(actor.scheduler);
@@ -79,6 +81,70 @@ class VectorTileWorkerSource extends Evented implements WorkerSource {
 
         const workerTile = this.loading[uid] = new WorkerTile(params);
         workerTile.abort = this.loadVectorData(params, (err, response) => {
+            const aborted = !this.loading[uid];
+
+            delete this.loading[uid];
+
+            if (aborted || err || !response) {
+                workerTile.status = 'done';
+                if (!aborted) this.loaded[uid] = workerTile;
+                return callback(err);
+            }
+
+            const rawTileData = response.rawData;
+            const cacheControl: Record<string, any> = {};
+            if (response.expires) cacheControl.expires = response.expires;
+            if (response.cacheControl) cacheControl.cacheControl = response.cacheControl;
+
+            // response.vectorTile will be present in the GeoJSON worker case (which inherits from this class)
+            // because we stub the vector tile interface around JSON data instead of parsing it directly
+            workerTile.vectorTile = response.vectorTile || new VectorTile(new Protobuf(rawTileData));
+            const parseTile = () => {
+                const workerTileCallback = (err?: Error | null, result?: WorkerTileResult | null) => {
+                    if (err || !result) return callback(err);
+
+                    const resourceTiming: Record<string, any> = {};
+                    if (perf) {
+                        // Transferring a copy of rawTileData because the worker needs to retain its copy.
+                        const resourceTimingData = getPerformanceMeasurement(requestParam);
+                        // it's necessary to eval the result of getEntriesByName() here via parse/stringify
+                        // late evaluation in the main thread causes TypeError: illegal invocation
+                        if (resourceTimingData.length > 0) {
+                            resourceTiming.resourceTiming = JSON.parse(JSON.stringify(resourceTimingData));
+                        }
+                    }
+                    callback(null, extend({rawTileData: rawTileData.slice(0)}, result, cacheControl, resourceTiming));
+                };
+                workerTile.parse(workerTile.vectorTile, this.layerIndex, this.availableImages, this.actor, workerTileCallback);
+            };
+
+            if (this.isSpriteLoaded) {
+                parseTile();
+            } else {
+                this.once('isSpriteLoaded', () => {
+                    if (this.scheduler) {
+                        const metadata = {type: 'parseTile', isSymbolTile: params.isSymbolTile, zoom: params.tileZoom};
+                        // @ts-expect-error - TS2345 - Argument of type '{ type: string; isSymbolTile: boolean; zoom: number; }' is not assignable to parameter of type 'TaskMetadata'.
+                        this.scheduler.add(parseTile, metadata);
+                    } else {
+                        parseTile();
+                    }
+                });
+            }
+
+            this.loaded = this.loaded || {};
+            this.loaded[uid] = workerTile;
+        });
+    }
+
+    loadTileForOffline(params: WorkerTileParameters, callback: WorkerTileCallback) {
+        const uid = params.uid;
+
+        const requestParam = params && params.request;
+        const perf = requestParam && requestParam.collectResourceTiming;
+
+        const workerTile = this.loading[uid] = new WorkerTile(params);
+        workerTile.abort = this.loadVectorDataForOffline(params, (err, response) => {
             const aborted = !this.loading[uid];
 
             delete this.loading[uid];

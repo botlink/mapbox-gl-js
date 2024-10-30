@@ -44,6 +44,7 @@ import defaultLocale from './default_locale';
 import {TrackedParameters} from '../tracked-parameters/tracked_parameters';
 import {TrackedParametersMock} from '../tracked-parameters/tracked_parameters_base';
 import {InteractionSet} from './interactions';
+import { deleteCachedArea } from '../data/botlink_cache';
 
 import type Marker from '../ui/marker';
 import type Popup from '../ui/popup';
@@ -4515,6 +4516,36 @@ export class Map extends Camera {
         });
 
         return this;
+    }
+
+    cacheAreaForOffline(key: string, lat: number, lng: number, zoom: number) {
+        return new Promise<void>((resolve, reject) => {
+            try {
+                const sources: Array<SourceCache> = this.style ? (Object.values(this.style._sourceCaches) as any) : [];
+
+                const transforms = [];
+
+                const newTransform = this.transform.clone();
+                newTransform.center = new LngLat(lng, lat);
+                newTransform.zoom = zoom;
+                transforms.push(newTransform);
+
+                asyncAll(
+                    sources,
+                    async (source, done) => source._preloadTilesForOffline(key, newTransform, done),
+                    () => {
+                        this.triggerRepaint();
+                        resolve();
+                    }
+                );
+            } catch (e) {
+                reject(e);
+            }
+        });
+    }
+
+    async deleteCachedArea (key: string) {
+        return deleteCachedArea(key);
     }
 
     _onWindowOnline() {

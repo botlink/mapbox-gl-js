@@ -1,7 +1,8 @@
 import {extend, pick} from '../util/util';
-import {getImage, ResourceType} from '../util/ajax';
+import {getImage, getImageForOffline, ResourceType} from '../util/ajax';
 import {Event, ErrorEvent, Evented} from '../util/evented';
 import loadTileJSON from './load_tilejson';
+import loadTileJSONForOffline from './load_tilejson_for_offline'
 import {postTurnstileEvent} from '../util/mapbox';
 import TileBounds from './tile_bounds';
 import browser from '../util/browser';
@@ -117,6 +118,33 @@ class RasterTileSource<T extends 'raster' | 'raster-dem' | 'raster-array' = 'ras
         });
     }
 
+    // Duplication of load with minor changes, done to add
+    // our caching but without impacting mapbox or merging from upstream
+    loadForOffline(key: string, callback?: Callback<undefined>) {
+        this._loaded = false;
+        this.fire(new Event('dataloading', {dataType: 'source'}));
+        this._tileJSONRequest = loadTileJSONForOffline(key, this._options, this.map._requestManager, null, null, (err, tileJSON) => {
+            this._tileJSONRequest = null;
+            this._loaded = true;
+            if (err) {
+                this.fire(new ErrorEvent(err));
+            } else if (tileJSON) {
+                extend(this, tileJSON);
+                if (tileJSON.bounds) this.tileBounds = new TileBounds(tileJSON.bounds, this.minzoom, this.maxzoom);
+
+                postTurnstileEvent(tileJSON.tiles);
+
+                // `content` is included here to prevent a race condition where `Style#updateSources` is called
+                // before the TileJSON arrives. this makes sure the tiles needed are loaded once TileJSON arrives
+                // ref: https://github.com/mapbox/mapbox-gl-js/pull/4347#discussion_r104418088
+                this.fire(new Event('data', {dataType: 'source', sourceDataType: 'metadata'}));
+                this.fire(new Event('data', {dataType: 'source', sourceDataType: 'content'}));
+            }
+
+            if (callback) callback(err);
+        });
+    }
+
     loaded(): boolean {
         return this._loaded;
     }
@@ -198,6 +226,35 @@ class RasterTileSource<T extends 'raster' | 'raster-dem' | 'raster-array' = 'ras
         const use2x = browser.devicePixelRatio >= 2;
         const url = this.map._requestManager.normalizeTileURL(tile.tileID.canonical.url(this.tiles, this.scheme), use2x, this.tileSize);
         tile.request = getImage(this.map._requestManager.transformRequest(url, ResourceType.Tile), (error, data, cacheControl, expires) => {
+            delete tile.request;
+
+            if (tile.aborted) {
+                tile.state = 'unloaded';
+                return callback(null);
+            }
+
+            if (error) {
+                tile.state = 'errored';
+                return callback(error);
+            }
+
+            if (!data) return callback(null);
+
+            if (this.map._refreshExpiredTiles) tile.setExpiryData({cacheControl, expires});
+            tile.setTexture(data, this.map.painter);
+            tile.state = 'loaded';
+
+            cacheEntryPossiblyAdded(this.dispatcher);
+            callback(null);
+        });
+    }
+
+    // Duplication of loadTile with minor changes, I did this to add
+    // our caching but without impacting mapbox or merging from upstream
+    loadTileForOffline(key: string, tile: Tile, callback: Callback<undefined>) {
+        const use2x = browser.devicePixelRatio >= 2;
+        const url = this.map._requestManager.normalizeTileURL(tile.tileID.canonical.url(this.tiles, this.scheme), use2x, this.tileSize);
+        tile.request = getImageForOffline(key, this.map._requestManager.transformRequest(url, ResourceType.Tile), (error, data, cacheControl, expires) => {
             delete tile.request;
 
             if (tile.aborted) {

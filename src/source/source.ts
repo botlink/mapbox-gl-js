@@ -100,6 +100,11 @@ export interface ISource extends Evented<SourceEvents> {
             [key: string]: Actor;
         },
     ) => void;
+    loadTileForOffline?: (
+        key: string,
+        tile: Tile,
+        callback: Callback<undefined>
+    ) => void;
     readonly hasTile?: (tileID: OverscaledTileID) => boolean;
     readonly abortTile?: (tile: Tile, callback?: Callback<undefined>) => void;
     readonly unloadTile?: (tile: Tile, callback?: Callback<undefined>) => void;

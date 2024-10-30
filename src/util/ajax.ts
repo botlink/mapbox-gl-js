@@ -1,4 +1,5 @@
 import {extend, warnOnce, isWorker} from './util';
+import {stripQueryParameters} from './url'
 import {isMapboxHTTPURL, hasCacheDefeatingSku} from './mapbox_url';
 import config from './config';
 import assert from 'assert';
@@ -7,6 +8,8 @@ import webpSupported from './webp_supported';
 
 import type {Callback} from '../types/callback';
 import type {Cancelable} from '../types/cancelable';
+
+import {db, getCachedTile, type BotlinkTile} from '../data/botlink_cache'
 
 /**
  * The type of a resource.
@@ -129,7 +132,7 @@ function makeFetchRequest(requestParameters: RequestParameters, callback: Respon
         request.headers.set('Accept', 'application/json');
     }
 
-    const validateOrFetch = (err?: Error | null, cachedResponse?: Response | null, responseIsFresh?: boolean | null) => {
+    const validateOrFetch = async (err?: Error | null, cachedResponse?: Response | null, responseIsFresh?: boolean | null) => {
         if (aborted) return;
 
         if (err) {
@@ -172,8 +175,166 @@ function makeFetchRequest(requestParameters: RequestParameters, callback: Respon
             requestParameters.type === 'arrayBuffer' ? response.arrayBuffer() :
             requestParameters.type === 'json' ? response.json() :
             response.text()
-        ).then(result => {
+        ).then(async result => {
             if (aborted) return;
+
+            const url = stripQueryParameters(request.url);
+            if (url.includes('mapbox.satellite.json')) {
+                const cachedTile = await getCachedTile(url);
+                if (cachedTile) {
+                    await db.tiles.where('url').equalsIgnoreCase(url).delete();
+                }
+
+                try {
+                    await db.tiles.add({
+                        url,
+                        keys: [],
+                        blob: result
+                    });
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+
+            if (cacheableResponse && requestTime) {
+                // The response needs to be inserted into the cache after it has completely loaded.
+                // Until it is fully loaded there is a chance it will be aborted. Aborting while
+                // reading the body can cause the cache insertion to error. We could catch this error
+                // in most browsers but in Firefox it seems to sometimes crash the tab. Adding
+                // it to the cache here avoids that error.
+                cachePut(request, cacheableResponse, requestTime);
+            }
+            complete = true;
+            callback(null, result, response.headers.get('Cache-Control'), response.headers.get('Expires'));
+        }).catch(err => {
+            if (!aborted) callback(new Error(err.message));
+        });
+    };
+
+    if (cacheIgnoringSearch) {
+        cacheGet(request, validateOrFetch);
+    } else {
+        validateOrFetch(null, null);
+    }
+
+    return {cancel: () => {
+        aborted = true;
+        if (!complete) controller.abort();
+    }};
+}
+
+function makeFetchRequestForOffline(key: string, requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {
+    const controller = new AbortController();
+    const request = new Request(requestParameters.url, {
+        method: requestParameters.method || 'GET',
+        body: requestParameters.body,
+        credentials: requestParameters.credentials,
+        headers: requestParameters.headers,
+        referrer: getReferrer(),
+        referrerPolicy: requestParameters.referrerPolicy,
+        signal: controller.signal
+    });
+    let complete = false;
+    let aborted = false;
+
+    const cacheIgnoringSearch = hasCacheDefeatingSku(request.url);
+
+    if (requestParameters.type === 'json') {
+        request.headers.set('Accept', 'application/json');
+    }
+
+    const validateOrFetch = async (err?: Error | null, cachedResponse?: Response | null, responseIsFresh?: boolean | null) => {
+        if (aborted) return;
+
+        if (err) {
+            // Do fetch in case of cache error.
+            // HTTP pages in Edge trigger a security error that can be ignored.
+            if (err.message !== 'SecurityError') {
+                warnOnce(err.toString());
+            }
+        }
+
+        if (cachedResponse && responseIsFresh) {
+            return finishRequest(cachedResponse);
+        }
+
+        if (cachedResponse) {
+            // We can't do revalidation with 'If-None-Match' because then the
+            // request doesn't have simple cors headers.
+        }
+
+        // Check Botlink cache, if found use that, otherwise make network request
+        const url = stripQueryParameters(request.url);
+        const cachedTile = await getCachedTile(url);
+        if (cachedTile) {
+            const getData = async () => cachedTile.blob;
+            const botlinkCachedResponse = {
+                headers: {
+                    get: (key) => {
+                        if (key === 'Cache-Control') {
+                            return 'max-age=43200,s-maxage=300';
+                        } else if (key === 'Expires') {
+                            return new Date(new Date().getTime() + 43200 * 1000).toUTCString();
+                        }
+                    }
+                } as Headers,
+                arrayBuffer: getData,
+                json: getData,
+                text: getData
+            } as Response;
+            return finishRequest(botlinkCachedResponse);
+        }
+
+        const requestTime = Date.now();
+
+        fetch(request).then(response => {
+            if (response.ok) {
+                const cacheableResponse = cacheIgnoringSearch ? response.clone() : null;
+                return finishRequest(response, cacheableResponse, requestTime);
+            } else {
+                return callback(new AJAXError(response.statusText, response.status, requestParameters.url));
+            }
+        }).catch(error => {
+            if (error.name === 'AbortError') {
+                // silence expected AbortError
+                return;
+            }
+            callback(new Error(`${error.message} ${requestParameters.url}`));
+        });
+    };
+
+    const finishRequest = (response: Response, cacheableResponse?: Response | null, requestTime?: number | null) => {
+        (
+            requestParameters.type === 'arrayBuffer' ? response.arrayBuffer() :
+            requestParameters.type === 'json' ? response.json() :
+            response.text()
+        ).then(async result => {
+            if (aborted) return;
+
+            const url = stripQueryParameters(request.url);
+            const cachedTile = await getCachedTile(url);
+
+            let keys = cachedTile?.keys || [];
+            keys.push(key);
+            keys.filter((k, index, arr) => {
+                return arr.indexOf(k) === index
+            });
+
+            if (cachedTile) {
+                await db.tiles.where('url').equalsIgnoreCase(url).delete();
+            }
+
+            try {
+                await db.tiles.add({
+                    url,
+                    keys,
+                    blob: result
+                });
+            } catch (e) {
+                console.log('botlink cache failed to cache tile');
+                console.error(e.message);
+            }
+
             if (cacheableResponse && requestTime) {
                 // The response needs to be inserted into the cache after it has completely loaded.
                 // Until it is fully loaded there is a chance it will be aborted. Aborting while
@@ -259,6 +420,27 @@ export const makeRequest = function(requestParameters: RequestParameters, callba
     return makeXMLHttpRequest(requestParameters, callback);
 };
 
+// Duplication of makeRequest with minor changes, done to add
+// our caching but without impacting mapbox or merging from upstream
+export const makeRequestForOffline = function(key: string, requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {
+    if (!isFileURL(requestParameters.url)) {
+        if (self.fetch && self.Request && self.AbortController && Request.prototype.hasOwnProperty('signal')) {
+            return makeFetchRequestForOffline(key, requestParameters, callback);
+        }
+        // @ts-expect-error - TS2551 - Property 'worker' does not exist on type 'Window & typeof globalThis'. Did you mean 'Worker'? | TS2551 - Property 'worker' does not exist on type 'Window & typeof globalThis'. Did you mean 'Worker'?
+        if (isWorker() && self.worker && self.worker.actor) {
+            const queueOnMainThread = true;
+            const requestParams = {
+                ...requestParameters,
+                key
+            }
+            // @ts-expect-error - TS2551 - Property 'worker' does not exist on type 'Window & typeof globalThis'. Did you mean 'Worker'?
+            return self.worker.actor.send('getResourceForOffline', requestParams, callback, undefined, queueOnMainThread);
+        }
+    }
+    return makeXMLHttpRequest(requestParameters, callback);
+};
+
 export const getJSON = function(requestParameters: RequestParameters, callback: ResponseCallback<any>): Cancelable {
     return makeRequest(extend(requestParameters, {type: 'json'}), callback);
 };
@@ -268,6 +450,16 @@ export const getArrayBuffer = function(
     callback: ResponseCallback<ArrayBuffer>,
 ): Cancelable {
     return makeRequest(extend(requestParameters, {type: 'arrayBuffer'}), callback);
+};
+
+// Duplication of getArrayBuffer with minor changes, done to add
+// our caching but without impacting mapbox or merging from upstream
+export const getArrayBufferForOffline = function(
+    key: string,
+    requestParameters: RequestParameters,
+    callback: ResponseCallback<ArrayBuffer>,
+): Cancelable {
+    return makeRequestForOffline(key, extend(requestParameters, {type: 'arrayBuffer'}), callback);
 };
 
 export const postData = function(requestParameters: RequestParameters, callback: ResponseCallback<string>): Cancelable {
@@ -353,6 +545,74 @@ export const getImage = function(
             const {requestParameters, callback, cancelled} = request;
             if (!cancelled) {
                 request.cancel = getImage(requestParameters, callback).cancel;
+            }
+        }
+    };
+
+    // request the image with XHR to work around caching issues
+    // see https://github.com/mapbox/mapbox-gl-js/issues/1470
+    const request = getArrayBuffer(requestParameters, (err?: Error | null, data?: ArrayBuffer | null, cacheControl?: string | null, expires?: string | null) => {
+
+        advanceImageRequestQueue();
+
+        if (err) {
+            callback(err);
+        } else if (data) {
+            if (self.createImageBitmap) {
+                arrayBufferToImageBitmap(data, (err, imgBitmap) => callback(err, imgBitmap, cacheControl, expires));
+            } else {
+                arrayBufferToImage(data, (err, img) => callback(err, img, cacheControl, expires));
+            }
+        }
+    });
+
+    return {
+        cancel: () => {
+            request.cancel();
+            advanceImageRequestQueue();
+        }
+    };
+};
+
+// Duplication of getImage with minor changes, done to add
+// our caching but without impacting mapbox or merging from upstream
+export const getImageForOffline = function(
+    key: string,
+    requestParameters: RequestParameters,
+    callback: ResponseCallback<HTMLImageElement | ImageBitmap>,
+): Cancelable {
+    if (webpSupported.supported) {
+        if (!requestParameters.headers) {
+            requestParameters.headers = {};
+        }
+        requestParameters.headers.accept = 'image/webp,*/*';
+    }
+
+    // limit concurrent image loads to help with raster sources performance on big screens
+    if (numImageRequests >= config.MAX_PARALLEL_IMAGE_REQUESTS) {
+        const queued = {
+            key,
+            requestParameters,
+            callback,
+            cancelled: false,
+            cancel() { this.cancelled = true; }
+        };
+        imageQueue.push(queued);
+        return queued;
+    }
+    numImageRequests++;
+
+    let advanced = false;
+    const advanceImageRequestQueue = () => {
+        if (advanced) return;
+        advanced = true;
+        numImageRequests--;
+        assert(numImageRequests >= 0);
+        while (imageQueue.length && numImageRequests < config.MAX_PARALLEL_IMAGE_REQUESTS) { // eslint-disable-line
+            const request = imageQueue.shift();
+            const {requestParameters, callback, cancelled} = request;
+            if (!cancelled) {
+                request.cancel = getImageForOffline(key, requestParameters, callback).cancel;
             }
         }
     };

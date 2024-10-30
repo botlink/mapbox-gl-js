@@ -234,6 +234,16 @@ export default class Worker {
         this.getWorkerSource(mapId, params.type, params.source, params.scope).loadTile(params, callback);
     }
 
+    // Duplication of loadTile with minor changes, done to add
+    // our caching but without impacting mapbox or merging from upstream
+    loadTileForOffline(mapId: string, params: WorkerTileParameters & {
+        type: string;
+    }, callback: WorkerTileCallback) {
+        assert(params.type);
+        params.projection = this.projections[mapId] || this.defaultProjection;
+        this.getWorkerSource(mapId, params.type, params.source, params.scope).loadTileForOffline(params, callback);
+    }
+
     loadDEMTile(mapId: string, params: WorkerDEMTileParameters, callback: WorkerDEMTileCallback) {
         this.getDEMWorkerSource(mapId, params.source, params.scope).loadTile(params, callback);
     }

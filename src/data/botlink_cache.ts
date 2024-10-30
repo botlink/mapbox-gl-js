@@ -1,13 +1,13 @@
 import Dexie, { type EntityTable } from 'dexie';
 
-export interface Tile {
+export interface BotlinkTile {
     url: string;
     keys: string[];
     blob: any;
 }
 
 export const db = new Dexie('botlink-tile-cache') as Dexie & {
-    tiles: EntityTable<Tile, 'url'>
+    tiles: EntityTable<BotlinkTile, 'url'>
 };
 
 db.version(1).stores({
